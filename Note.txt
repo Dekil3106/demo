@@ -1,0 +1,132 @@
+I. NGUYÊN TỐ
+    Fire: +50 damage khi tấn công Wind; –50 damage khi tấn công Fire, Energy
+    Wind: +50 damage khi tấn công Earth; –50 damage khi tấn công Wind, Void
+    Earth: +50 damage khi tấn công Water; –50 damage khi tấn công Earth, Metal
+    Water: +50 damage khi tấn công Fire; –50 damage khi tấn công Water, Plant
+    Plant: +50 damage khi tấn công Void; –50 damage khi tấn công Plant, Light
+    Metal: +50 damage khi tấn công Plant; –50 damage khi tấn công Metal, Shadow
+    Energy: +50 damage khi tấn công Metal; –50 damage khi tấn công Energy, Shadow
+    Void: +50 damage khi tấn công Energy; –50 damage khi tấn công Void, Light
+    Light: +50 damage khi tấn công Earth, Wind, Energy; –50 damage khi tấn công Light
+    Shadow: +50 damage khi tấn công Fire, Water, Plant; –50 damage khi tấn công Shadow
+
+II. LUẬT CHƠI
+    1. Mọi quân cờ đều có ngẫu nhiên 1 trong các nguyên tố.
+    2. Mọi quân cờ đều có 100 máu và mặc định gây ra 100 sát thương.
+    3. Sát thương có thể tăng giảm dựa trên nguyên tố.
+    4. Mỗi bên được đi 2 quân cờ khác nhau trước khi chuyển lượt cho đối phương.
+    5. Queen, Rook, Bishop chỉ di chuyển được tối đa 3 ô.
+    6. Phạm vi tấn công thường:
+            - Queen: 8 ô xung quanh
+            - Rook: 4 ô chữ thập xung quanh
+            - Bishop: 4 ô chéo xung quanh
+            - Các quân còn lại không cần thay đổi vì đã có logic phù hợp (phạm vi tấn công như phạm vi di chuyển cơ bản)
+    7. Tạo thanh HP cho từng quân:
+        - Hiển thị: Nếu máu 100 (đầy) thì không cần hiện, dưới 100 thì hiện ra.
+        - Vị trí: Nằm dưới quân cờ
+    8. Hiển thị sát thương trên quân bị tấn công, văn bản hiển thị theo công thức:
+        Tấn công thường/[Tên kỹ năng] -[damage] [Kèm ảnh nguyên tố tấn công]
+        Ví dụ:  Tấn Công Thường -100 [ảnh nguyên tố lửa]
+                Mưa Lũ Dâng Cao -20 [ảnh nguyên tố nước]
+    9. Kết hợp hai quân
+        - Điều kiện kết hợp: Dùng quân để di chuyển vào quân đồng minh khác. (Tạm gọi là "Quân di chuyển" và "Quân đứng yên")
+        - Khi kết hợp thì Quân di chuyển sẽ ăn Quân đứng yên.
+        - Quân di chuyển sẽ có thêm nguyên tố của Quân đứng yên (Thêm hậu tố vào tên class nguyên tố thêm vào để phân biệt là nguyên tố thứ hai, tạm thời không cần hiện và stlye sẽ bổ sung sau).
+        - Không thể kết hợp quân cùng nguyên tố hoặc vua.
+
+III. KỸ NĂNG ĐẶC BIỆT CỦA NGUYÊN TỐ
+    Một số lưu ý:
+        - Tất cả kỹ năng dưới đây đều là kỹ năng chủ động, được hiển thị trên ActionMenu và nằm dưới "Tấn công thường".
+        - "Tất cả quân" mặc định là cả đối phương lẫn quân đồng minh, ngoài trừ việc có chỉ định rõ là quân đối phương hay quân đồng minh thì mới khác biệt.
+        - Các hiệu ứng kỹ năng và sát thương đều tác dụng lên cả quân đối phương và quân đồng minh, chỉ có hệ nguyên tố phù hợp mới vô hiệu quá được.
+        - Đối với kỹ năng có hiệu ứng kéo dài thì các hiệu ứng chỉ tồn tại một lượt, sau lượt của đối thủ thì hết hiệu ứng.
+            Ví dụ: quân đen dùng kỹ năng rồi chuyển lượt qua bên trắng thì hiệu ứng kỹ năng vẫn tác dụng, sau khi bên trắng kết thúc lượt thì mới hết hiệu ứng kỹ năng. (Và ngược lại nếu quân trắng sử dụng kỹ năng)
+
+    1. Hỏa Vụ Bùng Nổ:
+        - Thiêu đốt mọi quân cờ trong khu vực 3x3 xung quanh, gây 30 sát thương.
+        - Sau đó khi mỗi bên kết thúc lượt thì gây thêm 20 sát thương lên mọi quân có trong vùng.
+        - Wind nhận gấp đôi sát thương, miễn nhiễm với Fire và Energy.
+        - Khi lửa bùng lên, không ai có thể thoát khỏi cơn nóng giận của tự nhiên.
+
+    2. Cuồng Phong Đẩy Lùi:
+        - Triệu hồi lốc xoáy đẩy lùi mọi quân cờ trong vùng 3x3 và gây 30 sát thương.
+        - Nếu bị chặn: cả hai chịu thiệt hại 30. Đẩy ra ngoài biên: nhận ngay 70 sát thương.
+        - Earth nhận gấp đôi sát thương, miễn dịch với Wind, Void.
+        - Gió gào thét xô đẩy tất thảy ngoài ý muốn.
+
+    3. Địa Phong Phong Ấn:
+        - Khóa chặt mọi di chuyển trong vùng 5x5 suốt 2 lượt: quân cờ trong vùng không thể rời đi, ngoài không thể xâm nhập.
+        - Quân trong vùng nhận ngay 25 sát thương. Water nhận gấp đôi sát thương, miễn dịch với Earth, Metal.
+        - Vùng đất rung chuyển, mọi lối đi đều đóng kín.
+
+    4. Thủy Triều Cuốn Trôi:
+        - Ngập lụt phạm vi 7x7, gây 20 sát thương cho tất cả quân cờ.
+        - Fire nhận gấp đôi sát thương, Water và Plant miễn nhiễm.
+        - Trong vùng, Queen/Rook/Bishop chỉ được di chuyển đúng 1 ô mỗi lượt, hiệu lực 2 lượt.
+        - Nước dâng cuốn mọi thứ vào dòng chảy.
+
+    5. Rễ Cây Đan Kết:
+        - Gây 30 sát thương và trói chân toàn bộ quân trong vùng 5x5 suốt 2 lượt (không thể di chuyển).
+        - Void nhận sát thương gấp đôi, Plant và Light miễn dịch.
+        - Khi rễ cây siết chặt, mọi bước chân đều phải dừng lại.
+
+    6. Bão Kim Sát Phạt:
+        - Tạo vùng hiểm địa 5x5 trong 2 lượt: bất kỳ ai di chuyển hoặc tấn công trong vùng đều nhận 50 sát thương.
+        - Plant chịu 100 sát thương, miễn nhiễm với Metal, Shadow.
+        - Thép lạnh trừng phạt mọi kẻ xâm nhập.
+
+    7. Lôi Điện Tê Liệt:
+        - Ngẫu nhiên sốc điện 16 ô bất kỳ trên bàn cờ, gây 30 sát thương và làm tê liệt quân bị trúng (không thể di chuyển/đánh) trong 2 lượt.
+        - Metal nhận gấp đôi sát thương, Energy/Shadow miễn dịch.
+        - Dòng điện chạy xuyên suốt chiến trường.
+
+    8. Hố Đen Nuốt Chửng:
+        - Trong vùng 3x3 (trừ trung tâm), chọn ngẫu nhiên 4 ô: mỗi ô chứa quân đều bị giáng 100 sát thương.
+        - Energy nhận gấp đôi sát thương, Void/Light miễn nhiễm.
+        - Không gian vặn xoắn cuốn mọi vật vào hư vô.
+
+    9. Thánh Quang Hồi Sinh:
+        - Hồi phục toàn bộ quân cờ lên đầy máu.
+        - Ánh sáng nhiệm màu đưa hy vọng cho những linh hồn hấp hối.
+
+    10. Hắc Ám Bào Mòn:
+        - Tước đoạt sức mạnh: mọi quân cờ đang đầy máu (100) sẽ lập tức bị giảm còn 1 máu.
+        - Ánh đen lan rộng, sức sống bị rút cạn chỉ trong chớp mắt.
+
+        
+
+1. Fire
+2. Wind
+3. Earth
+4. Water
+5. Plant
+6. Metal
+7. Energy
+8. Void
+9. Light
+10. Shadow
+
+CẦN CẬP NHẬT THÊM 
+
+- Thêm UI hiện mô tả hiệu ứng của vùng kỹ năng (Quân bị tê liệt, không thể chọn; Quân bị làm chậm, phạm vi di chuyển còn 1; Quân bị trói chân, không thể di chuyển;...)
+- Thêm animation cho các kỹ năng.
+
+
+    
+
+${skillName}
+renderBoard() { for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) { const zIndex = r * 8 + (7 - c) + 1, d = document.createElement('div'); d.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark'); d.setAttribute('role', 'gridcell'); d.setAttribute('aria-colindex', c + 1); d.setAttribute('aria-rowindex', r + 1); d.dataset.square = this.files[c] + this.ranks[r]; d.style.zIndex = zIndex; this.board.appendChild(d); } }
+
+
+
+      updatePieceHPBar(pieceEl, baseHP = 100) {
+        if (!pieceEl) return;
+        let hpbar = pieceEl.querySelector('.piece-hpbar');
+        if (hpbar) hpbar.remove();
+
+        const hp = parseInt(pieceEl.dataset.hp ?? 100, 10);
+        if (hp >= 100) return;
+        hpbar = document.createElement('div'); hpbar.className = 'piece-hpbar'; hpbar.setAttribute('aria-label', 'HP Indicator');
+        const fill = document.createElement('div'); fill.className = 'piece-hpbar-fill'; fill.style.width = Math.max(0, Math.min(100, hp)) + "%"; hpbar.appendChild(fill);
+        pieceEl.style.position = 'relative'; pieceEl.appendChild(hpbar);
+      }

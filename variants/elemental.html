@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bàn Cờ Vua - Nguyên Tố</title>
+  <link rel="stylesheet" href="../assets/styles/common.css">
+  <link rel="stylesheet" href="../assets/styles/elemental.css">
+</head>
+<body>
+  <main class="app">
+    <div class="header-block">
+      <h1>Bàn Cờ Vua - Nguyên Tố</h1>
+      <div class="turn">
+        TURN:&nbsp<span id="count-turn">1</span>
+      </div>
+    </div>
+    <section class="board-area" aria-label="Chessboard with labels">
+      <div class="ranks" id="ranks-left" aria-hidden="true"></div>
+      <div class="board-wrap" id="board-wrap" tabindex="0" aria-label="Bàn cờ, dùng phím mũi tên để chọn ô">
+        <div id="board" class="board" role="grid" aria-rowcount="8" aria-colcount="8"></div>
+      </div>
+      <div class="files" id="files-bottom" aria-hidden="true"></div>
+
+      <!-- Sidebar status (right of board) -->
+      <aside class="sidebar">
+        <div id="status-p2" class="status status-red" aria-live="polite">
+          <div class="title title-red">Player 2 (viền đỏ)</div>
+          <div class="content">
+            <div class="selection-row">
+              <span class="label">Đang chọn:</span>
+              <span class="piece-slot"></span>
+            </div>
+            <div class="selected-stats"></div>
+            <div class="target-row">
+              <span class="label">Mục tiêu:</span>
+              <span class="under-slot"></span>
+            </div>
+            <div class="target-stats"></div>
+          </div>
+        </div>
+        <div id="status-p1" class="status status-blue" aria-live="polite">
+          <div class="title title-blue">Player 1 (viền xanh)</div>
+          <div class="content">
+            <div class="selection-row">
+              <span class="label">Đang chọn:</span>
+              <span class="piece-slot"></span>
+            </div>
+            <div class="selected-stats"></div>
+            <div class="target-row">
+              <span class="label">Mục tiêu:</span>
+              <span class="under-slot"></span>
+            </div>
+            <div class="target-stats"></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+    <div class="footer">Mũi tên: di chuyển selection xanh | WASD: di chuyển selection đỏ — Ghi chú: Selection viền xanh là Player 1; Selection viền đỏ là Player 2.</div>
+  </main>
+
+  <script type="module">
+    // --- Short version ---
+    import { ClassicRules } from "../rules/classic.js"
+
+    // ===== Map icon nguyên tố với HTML sử dụng class và background-image =====
+    const ELEMENT_ICONS = {
+      fire:    '<span class="icon-element icon-fire"></span>',
+      wind:    '<span class="icon-element icon-wind"></span>',
+      earth:   '<span class="icon-element icon-earth"></span>',
+      water:   '<span class="icon-element icon-water"></span>',
+      plant:   '<span class="icon-element icon-plant"></span>',
+      metal:   '<span class="icon-element icon-metal"></span>',
+      energy:  '<span class="icon-element icon-energy"></span>',
+      void:    '<span class="icon-element icon-void"></span>',
+      light:   '<span class="icon-element icon-light"></span>',
+      shadow:  '<span class="icon-element icon-shadow"></span>',
+    };
+
+    class BoardManager {
+      constructor(board, files, ranks) { this.board = board; this.files = files; this.ranks = ranks; }
+      getSquareByRowCol(r, c) { return this.board.querySelector(`[data-square="${this.files[c]}${this.ranks[r]}"]`); }
+      getPieceInSquare(sq) { return sq ? sq.querySelector('.piece') : null; }
+      isSquareEmpty(sq) { return !this.getPieceInSquare(sq); }
+      isPathClear(fr, fc, tr, tc, maxStep = null) {
+        let dr = tr === fr ? 0 : tr > fr ? 1 : -1,
+            dc = tc === fc ? 0 : tc > fc ? 1 : -1,
+            r = fr + dr, c = fc + dc, steps = 1;
+        while (r !== tr || c !== tc) {
+          if (!this.isSquareEmpty(this.getSquareByRowCol(r, c))) return false;
+          r += dr; c += dc; steps++;
+          if (maxStep !== null && steps > maxStep) return false;
+        }
+        return true;
+      }
+      renderBoard() { 
+        for (let r = 0; r < 8; r++) 
+          for (let c = 0; c < 8; c++) { 
+            const d = document.createElement('div');
+            d.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
+            d.setAttribute('role', 'gridcell');
+            d.setAttribute('aria-colindex', c + 1);
+            d.setAttribute('aria-rowindex', r + 1);
+            d.dataset.square = this.files[c] + this.ranks[r];
+            this.board.appendChild(d);
+          } 
+      }
+      renderPieces(ps) { Object.entries(ps).forEach(([sq, p]) => { const t = this.board.querySelector(`[data-square="${sq}"]`); if (t) { const s = document.createElement('span'); s.className = 'piece ' + p.color; s.textContent = p.ch; t.appendChild(s); } }); this.updateAllPieceHPBars(); }
+      renderLabels(fb, rl) { this.files.forEach(f => { const s = document.createElement('span'); s.textContent = f; fb.appendChild(s); }); this.ranks.forEach(k => { const s = document.createElement('span'); s.textContent = k; rl.appendChild(s); }); }
+      showValidMoves(vm, col) { this.clearValidMoves(); vm.forEach(m => { const sq = this.getSquareByRowCol(m.row, m.col); if (!sq) return; const i = document.createElement('div'); i.className = 'move-indicator'; i.classList.add(m.isCapture ? 'circle' : 'dot'); sq.appendChild(i); }); }
+      clearValidMoves() { this.board.querySelectorAll('.move-indicator').forEach(i => i.remove()); }
+      updatePieceHPBar(pieceEl, baseHP = 100) {
+        if (!pieceEl) return;
+
+        let hpbar = pieceEl.querySelector('.piece-hpbar');
+        if (hpbar) hpbar.remove();
+
+        const hp = parseInt(pieceEl.dataset.hp ?? 100, 10);
+        if (hp >= 100) return;
+
+        // Tạo khung HP
+        hpbar = document.createElement('div');
+        hpbar.className = 'piece-hpbar';
+        hpbar.setAttribute('aria-label', 'HP Indicator');
+
+        const fill = document.createElement('div');
+        fill.className = 'piece-hpbar-fill';
+
+        // B1: width ban đầu = 100% để transition có điểm bắt đầu
+        fill.style.width = pieceEl.dataset.lastHp + "%";
+        pieceEl.dataset.lastHp = hp;
+
+        hpbar.appendChild(fill);
+        pieceEl.style.position = 'relative';
+        pieceEl.appendChild(hpbar);
+
+        // B2: Sang frame tiếp theo mới set width thật
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            fill.style.width = Math.max(0, Math.min(100, hp)) + "%";
+          });
+        });
+      }
+
+      updateAllPieceHPBars(baseHP = 100) { this.board.querySelectorAll('.piece').forEach(pieceEl => { this.updatePieceHPBar(pieceEl, baseHP); }); }
+    }
+
+    class UIManager {
+      constructor(a,b,c,d,e,f,g,h){this.statusP1=a;this.statusP2=b;this.statusP1Under=c;this.statusP2Under=d;this.statusP1Stats=e;this.statusP2Stats=f;this.statusP1SelectedStats=g;this.statusP2SelectedStats=h;}
+      updateStatusPanels(blueHold,redHold,selRow,selCol,selRowRed,selColRed,boardManager){
+        const formatStats=piece=>!piece?'':`HP: ${piece.dataset.hp||'100'} | Nguyên tố: ${(piece.dataset.secondElement?piece.dataset.element+' + '+piece.dataset.secondElement:piece.dataset.element)||'-'}`;
+        const status=(el,hold,stat,cls)=>el&&(el.textContent='',hold&&hold.pieceEl?(el.textContent=hold.pieceEl.textContent||'',el.className=cls+' '+(hold.pieceEl.classList.contains('black')?'black':'white'),stat&&(stat.textContent=formatStats(hold.pieceEl))):(el.className=cls,stat&&(stat.textContent='')));
+        status(this.statusP1,blueHold,this.statusP1SelectedStats,'piece-slot');
+        if(this.statusP1Under){
+          this.statusP1Under.className='under-slot';
+          let sq=boardManager.getSquareByRowCol(selRow,selCol),p=boardManager.getPieceInSquare(sq);
+          if(p){
+            !p.querySelector('.piece-damage-indicator')&&(this.statusP1Under.textContent=p.textContent||'');
+            this.statusP1Under.className='under-slot '+(p.classList.contains('black')?'black':'white');
+            this.statusP1Stats&&(this.statusP1Stats.textContent=formatStats(p));
+          }else{
+            this.statusP1Under.textContent='';this.statusP1Under.className='under-slot';this.statusP1Stats&&(this.statusP1Stats.textContent='');
+          }
+        }
+        status(this.statusP2,redHold,this.statusP2SelectedStats,'piece-slot');
+        if(this.statusP2Under){
+          this.statusP2Under.className='under-slot';
+          let sq=boardManager.getSquareByRowCol(selRowRed,selColRed),p=boardManager.getPieceInSquare(sq);
+          if(p){
+            !p.querySelector('.piece-damage-indicator')&&(this.statusP2Under.textContent=p.textContent||'');
+            this.statusP2Under.className='under-slot '+(p.classList.contains('black')?'black':'white');
+            this.statusP2Stats&&(this.statusP2Stats.textContent=formatStats(p));
+          }else{
+            this.statusP2Under.textContent='';this.statusP2Under.className='under-slot';this.statusP2Stats&&(this.statusP2Stats.textContent='');
+          }
+        }
+      }
+      updateSelection(lastS,lastSR,sr,sc,srR,scR,boardManager){
+        lastS&&lastS.classList.remove('selected');const e=boardManager.getSquareByRowCol(sr,sc);e&&(e.classList.add('selected'),lastS=e,e.scrollIntoView({block:'nearest',inline:'nearest'}));lastSR&&lastSR.classList.remove('selected-red');const eR=boardManager.getSquareByRowCol(srR,scR);eR&&(eR.classList.add('selected-red'),lastSR=eR);return{lastSelected:lastS,lastSelectedRed:lastSR};
+      }
+
+      showPromotionMenu(player,pieceColor,promo,boardWrap,onConfirm,onCancel){const overlay=document.createElement('div');overlay.className='promotion-overlay';overlay.id='promotion-overlay';overlay.tabIndex=-1;overlay.addEventListener('mousedown',e=>{const t=e.target;t&&t.classList&&t.classList.contains('promotion-option')||e.preventDefault();setTimeout(()=>boardWrap.focus(),0)});const menu=document.createElement('div');menu.className='promotion-menu';const choices=promo[pieceColor];choices.forEach((ch,i)=>{const opt=document.createElement('div');opt.className='promotion-option '+pieceColor;opt.textContent=ch;opt.dataset.index=i;menu.appendChild(opt)});const ins=document.createElement('div');ins.className='promotion-instructions';ins.textContent=player==='blue'?'Mũi tên: chọn quân | Num 2: xác nhận | Num 1: hủy':'WASD: chọn quân | G: xác nhận | F: hủy';menu.appendChild(ins);overlay.appendChild(menu);document.body.appendChild(overlay);let idx=0;const update=()=>{document.querySelectorAll('.promotion-option').forEach((opt,i)=>{opt.classList.remove('selected','selected-red');i===idx&&opt.classList.add(player==='blue'?'selected':'selected-red')})};update();const keyFn=e=>{const k=e.key.toLowerCase(),code=e.code,keyMap={blue:{left:['arrowleft'],right:['arrowright'],confirm:['2','numpad2'],cancel:['1','numpad1']},red:{left:['a'],right:['d'],confirm:['g'],cancel:['f']}};const b=keyMap[player];let h=!1,chk=q=>q.includes(k)||q.includes(code);if(chk(b.left)&&idx>0){idx--;h=!0}else if(chk(b.right)&&idx<choices.length-1){idx++;h=!0}else if(chk(b.confirm)){onConfirm(idx);h=!0}else if(chk(b.cancel)){onCancel();h=!0}h&&(e.preventDefault(),(chk(b.left)||chk(b.right))&&update())};document.addEventListener('keydown',keyFn);setTimeout(()=>boardWrap.focus(),0);return{remove:()=>{document.removeEventListener('keydown',keyFn);overlay.parentNode&&overlay.remove()}}}
+      showElementChart() { let e = document.getElementById('elemental-chart-overlay'); if (e) return e.remove(); document.body.appendChild(Object.assign(document.createElement('div'), { id: 'elemental-chart-overlay', style: 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:9999;pointer-events:none;', innerHTML: '<img src="../assets/img/elemental_chart.png" alt="Elemental Chart" style="max-width:95vw;max-height:95vh;box-shadow:0 4px 48px rgba(0,0,0,0.9);border-radius:10px;">'})); }
+    
+    }
+
+    // (EffectManager và ElementRules giữ nguyên như cũ)
+    class EffectManager {
+      static triggerPsionicResidue(sqEl,col){if(!sqEl)return;const a=document.createElement('div');a.className='psionic-aura '+col;sqEl.appendChild(a);requestAnimationFrame(()=>a.classList.add('active'));const r=document.createElement('div');r.className='psionic-residue '+col;sqEl.appendChild(r);requestAnimationFrame(()=>r.classList.add('active'));setTimeout(()=>{a.remove();r.remove();},2000);}
+      static triggerFieldResonance(sqEl,col){if(!sqEl)return;const res=document.createElement('div');res.className='field-resonance';sqEl.appendChild(res);const c=document.createElement('div');c.className='field-convergence '+col;res.appendChild(c);setTimeout(()=>c.classList.add('active'),10);
+        [0,45,90,135,180,225,270,315].forEach((a,i)=>{setTimeout(()=>{const l=document.createElement('div');l.className='psionic-lightning '+col;l.style.setProperty('--lightning-angle',a+'deg');res.appendChild(l);setTimeout(()=>l.classList.add('active'),10);setTimeout(()=>{l.parentNode&&l.remove();},500);},i*30);});
+        setTimeout(()=>{res.parentNode&&res.remove();},800);}
+      static triggerPsionicClash(sqEl,atk,def,capEl){if(!sqEl)return;const cl=document.createElement('div');cl.className='psionic-clash';sqEl.appendChild(cl);
+        const r1=document.createElement('div');r1.className='clash-ring ring1 '+atk;if(atk==='white'){r1.style.color='rgba(64,224,208,0.9)';r1.style.boxShadow='0 0 20px rgba(64,224,208,.8),0 0 10px rgba(0,255,127,.6)';}else{r1.style.color='rgba(138,43,226,0.9)';r1.style.boxShadow='0 0 25px rgba(138,43,226,.8),0 0 15px rgba(255,20,147,.6)';}cl.appendChild(r1);
+        const r2=document.createElement('div');r2.className='clash-ring ring2 '+def;if(def==='white'){r2.style.color='rgba(64,224,208,0.9)';r2.style.boxShadow='0 0 20px rgba(64,224,208,.8),0 0 10px rgba(0,255,127,.6)';}
+        else{r2.style.color='rgba(138,43,226,0.9)';r2.style.boxShadow='0 0 25px rgba(138,43,226,.8),0 0 15px rgba(255,20,147,.6)';}cl.appendChild(r2);
+        setTimeout(()=>{r1.classList.add('active');r2.style.animation='clash-interweave 0.6s ease-out reverse forwards, clash-explode 0.6s ease-out 0.3s forwards';r2.classList.add('active');},10);
+        for(let i=0;i<12;i++)setTimeout(()=>{const p=document.createElement('div');p.className='fractal-particle '+def;const a=360/12*i,d=60+Math.random()*40,rad=a*Math.PI/180,x=Math.cos(rad)*d,y=Math.sin(rad)*d-80;p.style.setProperty('--particle-x',x+'px');p.style.setProperty('--particle-y',y+'px');cl.appendChild(p);setTimeout(()=>p.classList.add('active'),10);setTimeout(()=>{p.parentNode&&p.remove();},1300);},i*30);
+        setTimeout(()=>{cl.parentNode&&cl.remove();},1500);}
+    }
+    class ElementRules extends ClassicRules {
+      constructor(game) { super(); this.game = game, this.chess960White = null, this.chess960Black = null, this.elementTypes = ["fire","wind","earth","water","plant","metal","energy","void","light","shadow"]; }
+      getRandomElementType = () => this.elementTypes[Math.random() * this.elementTypes.length | 0];
+      getRandomChess960Backrank = (w = true) => { let s = [0,1,2,3,4,5,6,7], b = Array(8).fill(null), e = s.filter(i => i % 2 === 0), o = s.filter(i => i % 2 === 1), bi1 = e[Math.random() * e.length | 0]; b[bi1] = w ? '♗' : '♝'; s = s.filter(x => x !== bi1); let bi2 = o[Math.random() * o.length | 0]; b[bi2] = w ? '♗' : '♝'; s = s.filter(x => x !== bi2); let qI = s[Math.random() * s.length | 0]; b[qI] = w ? '♕' : '♛'; s = s.filter(x => x !== qI); let ks = []; for (let i = 0; i < s.length; i++) for (let j = i + 1; j < s.length; j++) ks.push([s[i], s[j]]); let kp = ks[Math.random() * ks.length | 0]; b[kp[0]] = w ? '♘' : '♞'; b[kp[1]] = w ? '♘' : '♞'; s = s.filter(x => x !== kp[0] && x !== kp[1]); s.sort((a, b) => a - b); b[s[0]] = w ? '♖' : '♜'; b[s[1]] = w ? '♔' : '♚'; b[s[2]] = w ? '♖' : '♜'; return b; }
+      getInitialSetup = () => {
+        // Khởi tạo backrank Chess960 cho mỗi bên nếu chưa có
+        if (!this.chess960White || !this.chess960Black) {
+          this.chess960White = this.getRandomChess960Backrank(true);
+          this.chess960Black = this.getRandomChess960Backrank(false);
+        }
+        const setup = {};
+        const files = ['a','b','c','d','e','f','g','h'];
+
+        // Hàng 3: quân chủ lực trắng theo chess960
+        for (let i = 0; i < 8; i++) {
+          setup[files[i] + '1'] = {
+            ch: this.chess960White[i],
+            color: 'white',
+            element: this.getRandomElementType()
+          };
+        }
+        // Hàng 1: tốt trắng
+        for (let i = 0; i < 8; i++) {
+          setup[files[i] + '3'] = {
+            ch: '♙',
+            color: 'white',
+            element: this.getRandomElementType()
+          };
+        }
+        // Hàng 8: tốt đen
+        for (let i = 0; i < 8; i++) {
+          setup[files[i] + '6'] = {
+            ch: '♟',
+            color: 'black',
+            element: this.getRandomElementType()
+          };
+        }
+        // Hàng 6: quân chủ lực đen theo chess960
+        for (let i = 0; i < 8; i++) {
+          setup[files[i] + '8'] = {
+            ch: this.chess960Black[i],
+            color: 'black',
+            element: this.getRandomElementType()
+          };
+        }
+
+        return setup;
+      }
+      getAllValidMoves(pt, pc, fr, fc, bm) { return (pt === 'king' ? this.getCastlingTargetsForKing(pc, fr, fc, bm).map(t => ({ row: t.row, col: t.col, isCastlingTarget: true, castlingSide: t.castlingSide })) : []).concat([...[...Array(8).keys()].flatMap(r => [...Array(8).keys()].flatMap(c => (fr === r && fc === c) ? [] : (this.isValidMove(pt, pc, fr, fc, r, c, bm, false) ? (() => { const sq = bm.getSquareByRowCol(r, c), p = bm.getPieceInSquare(sq); return [{ row: r, col: c, isCapture: !!p && (p.classList.contains('black') !== (pc === 'black')) }]; })() : [])))]); }
+      isValidMove = (t, col, fr, fc, tr, tc, bm, isC = false) => {
+        // #region PLANT ROOT STUN EFFECT: chỉ cho đứng yên nếu nằm trong vùng rootArea và không immune
+        if (
+          this.game &&
+          this.game.skillManager &&
+          Array.isArray(this.game.skillManager.tempEffects)
+        ) {
+          for (const eff of this.game.skillManager.tempEffects) {
+            if (
+              eff.type === "rootArea" &&
+              eff.turnsLeft > 0 &&
+              eff.coords.some(({ row, col }) => row === fr && col === fc)
+            ) {
+              // kiểm tra miễn nhiễm
+              let sqP = bm.getPieceInSquare(bm.getSquareByRowCol(fr, fc));
+              if (!sqP) {
+                if (col === "white" && this.game.blueHold && this.game.blueHold.pieceEl) sqP = this.game.blueHold.pieceEl;
+                if (col === "black" && this.game.redHold && this.game.redHold.pieceEl) sqP = this.game.redHold.pieceEl;
+              }
+              let el = sqP ? (sqP.dataset.element || null) : null;
+              let el2 = sqP ? (sqP.dataset.secondElement || null) : null;
+              const immuneList = eff.immune || [];
+              if (el && immuneList.includes(el)) continue;
+              if (el2 && immuneList.includes(el2)) continue;
+              // bị hiệu ứng root: chỉ đứng yên, không thể di chuyển khỏi chỗ
+              if (fr !== tr || fc !== tc) return false;
+            }
+          }
+        }
+        // #endregion
+
+        // #region EARTH BLOCK AREA EFFECT: không được di chuyển ra khỏi vùng blockArea (chỉ di chuyển trong vùng), ngoài vùng cũng không vào được vùng
+        if (
+          this.game &&
+          this.game.skillManager &&
+          Array.isArray(this.game.skillManager.tempEffects)
+        ) {
+          for (const eff of this.game.skillManager.tempEffects) {
+            if (
+              eff.type === "blockArea" &&
+              eff.turnsLeft > 0
+            ) {
+              // kiểm tra miễn nhiễm
+              let sqP = bm.getPieceInSquare(bm.getSquareByRowCol(fr, fc));
+              if (!sqP) {
+                if (col === "white" && this.game.blueHold && this.game.blueHold.pieceEl) sqP = this.game.blueHold.pieceEl;
+                if (col === "black" && this.game.redHold && this.game.redHold.pieceEl) sqP = this.game.redHold.pieceEl;
+              }
+              let el = sqP ? (sqP.dataset.element || null) : null;
+              let el2 = sqP ? (sqP.dataset.secondElement || null) : null;
+              const immuneList = eff.immune || [];
+              if (el && immuneList.includes(el)) continue;
+              if (el2 && immuneList.includes(el2)) continue;
+              // Quân trong vùng chỉ được di chuyển trong vùng, quân ngoài vùng không vào được vùng
+              const inStart = eff.coords.some(({ row, col }) => row === fr && col === fc);
+              const inTarget = eff.coords.some(({ row, col }) => row === tr && col === tc);
+              if (inStart !== inTarget) return false;
+              // (chỉ cho phép di chuyển giữa các ô đều thuộc vùng hoặc đều không thuộc vùng blockArea)
+            }
+          }
+        }
+        // #endregion
+
+        if (fr === tr && fc === tc) return true;
+        const sq = bm.getSquareByRowCol(tr, tc), tp = bm.getPieceInSquare(sq);
+
+        // Không cho vào quân đối phương (không thể di chuyển, không phép "tấn công" theo luật di chuyển thường)
+        if (tp && tp.classList.contains('black') !== (col === 'black')) {
+          // Không thể di chuyển vào ô có quân đối phương
+          return false;
+        }
+
+        // Có thể nhập vào quân đồng minh nếu khác element
+        if (tp && tp.classList.contains('black') === (col === 'black') && !isC) {
+          // Nếu là quân đồng minh, chỉ cho nhập khi khác element
+          const sqP = bm.getPieceInSquare(bm.getSquareByRowCol(fr, fc));
+          let pieceEl = sqP;
+          // Nếu đang hold ngoài (drop piece): dùng blueHold/redHold
+          if (!pieceEl) {
+            if (col === "white" && this.game.blueHold && this.game.blueHold.pieceEl) pieceEl = this.game.blueHold.pieceEl;
+            if (col === "black" && this.game.redHold && this.game.redHold.pieceEl) pieceEl = this.game.redHold.pieceEl;
+          }
+          let curEl = pieceEl ? (pieceEl.dataset.element || null) : null;
+          let tarEl = tp ? (tp.dataset.element || null) : null;
+          if (curEl && tarEl && curEl !== tarEl) {
+            // Chấp nhận
+          } else {
+            // Không thể nhập nếu cùng element hoặc không rõ element
+            return false;
+          }
+        }
+
+        const dr = Math.abs(tr - fr), dc = Math.abs(tc - fc);
+        let maxStep = 3, limitStep = null;
+        
+        if (this.game && this.game.skillManager && this.game.skillManager.tempEffects)
+          for (const eff of this.game.skillManager.tempEffects) {
+            if (eff.type === "waterArea" && eff.turnsLeft > 0 && eff.coords.some(({ row, col }) => row === fr && col === fc)) {
+              let sqP = bm.getPieceInSquare(bm.getSquareByRowCol(fr, fc));
+              if (!sqP) { if (col === "white" && this.game.blueHold && this.game.blueHold.pieceEl) sqP = this.game.blueHold.pieceEl; if (col === "black" && this.game.redHold && this.game.redHold.pieceEl) sqP = this.game.redHold.pieceEl; }
+              let el = sqP ? (sqP.dataset.element || null) : null;
+              if (el && eff.immune && eff.immune.includes(el)) continue;
+              if (eff.targets && eff.targets.includes(t)) { limitStep = eff.maxStep; break; }
+            }
+          }
+
+        if (limitStep) maxStep = limitStep;
+        switch (t) {
+          case 'king': return (dr <= 1 && dc <= 1 && (dr > 0 || dc > 0)) || (fr === tr && fc === tc);
+          case 'queen': return ((!dr || !dc || dr === dc) && !(fr === tr && fc === tc)) ? (Math.max(dr, dc) > maxStep ? false : bm.isPathClear(fr, fc, tr, tc, maxStep)) : (fr === tr && fc === tc);
+          case 'rook': return (((!dr || !dc) && (dr > 0 || dc > 0)) && !(fr === tr && fc === tc)) ? ((Math.max(dr, dc) > maxStep) ? false : bm.isPathClear(fr, fc, tr, tc, maxStep)) : (fr === tr && fc === tc);
+          case 'bishop': return ((dr === dc && dr > 0) && !(fr === tr && fc === tc)) ? (dr > maxStep ? false : bm.isPathClear(fr, fc, tr, tc, maxStep)) : (fr === tr && fc === tc);
+          case 'knight': return ((dr === 2 && dc === 1) || (dr === 1 && dc === 2)) || (fr === tr && fc === tc);
+          case 'pawn': return (fr === tr && fc === tc) ? true : (() => { let tSq = bm.getSquareByRowCol(tr, tc), tP = bm.getPieceInSquare(tSq); if (col === 'white') { if (fc === tc) { if (tP) return false; if (fr === 6 && tr === 4) return bm.isPathClear(fr, fc, tr, tc); if (fr - tr === 1) return true; } else if (Math.abs(fc - tc) === 1 && fr - tr === 1) { if (tP && tP.classList.contains('black')) return true; if (this.enPassantTarget && this.enPassantTarget.row === tr && this.enPassantTarget.col === tc && this.enPassantTarget.color === 'black') return true; } } else { if (fc === tc) { if (tP) return false; if (fr === 1 && tr === 3) return bm.isPathClear(fr, fc, tr, tc); if (tr - fr === 1) return true; } else if (Math.abs(fc - tc) === 1 && tr - fr === 1) { if (tP && tP.classList.contains('white')) return true; if (this.enPassantTarget && this.enPassantTarget.row === tr && this.enPassantTarget.col === tc && this.enPassantTarget.color === 'white') return true; } } return false; })();
+          default: return false;
+        }
+      }
+    }
+    
+    // #skill ===== Skill System for Elemental Abilities =====
+    class SkillManager {
+      constructor(game) {
+        this.game = game;
+        // #skill Biến lưu thông tin và logic cho các kỹ năng nguyên tố.
+        this.skills = {
+          fire: { 
+            label: 'Hỏa Vụ Bùng Nổ', 
+            description: 'Thiêu đốt mọi quân cờ trong khu vực 3x3 xung quanh, gây 30 sát thương. Wind nhận gấp đôi sát thương, miễn nhiễm với Fire và Energy. Sau đó, tất cả quân đứng trong vùng này nhận thêm 20 sát thương vào cuối lượt kế tiếp.', 
+            use: (r, c, p) => { this.fire(r, c, p); this.addEffectSquare(); }
+          },
+          wind: { 
+            label: 'Cuồng Phong Đẩy Lùi', 
+            description: 'Triệu hồi lốc xoáy đẩy lùi mọi quân cờ trong vùng 3x3 và gây 30 sát thương. Nếu bị chặn: cả hai chịu thiệt hại 30. Đẩy ra ngoài biên: nhận ngay 70 sát thương. Earth nhận gấp đôi sát thương, miễn dịch với Wind, Void. Gió gào thét xô đẩy tất thảy ngoài ý muốn.', 
+            use: (r, c, p) => { this.wind(r, c, p); this.addEffectSquare(); }
+          },
+          earth: { 
+            label: 'Địa Phong Phong Ấn', 
+            description: 'Khóa chặt mọi di chuyển trong vùng 5x5 suốt 2 lượt: quân cờ trong vùng không thể rời đi, ngoài không thể xâm nhập. Quân trong vùng nhận ngay 25 sát thương. Water nhận gấp đôi sát thương, miễn dịch với Earth, Metal. Vùng đất rung chuyển, mọi lối đi đều đóng kín.',
+            use: (r, c, p) => { this.earth(r, c, p); this.addEffectSquare(); }
+          },
+          water: { 
+            label: 'Thủy Triều Cuốn Trôi', 
+            description: 'Ngập lụt phạm vi 7x7, gây 20 sát thương cho tất cả quân cờ. Fire nhận gấp đôi sát thương, Water và Plant miễn nhiễm. Trong vùng, Queen/Rook/Bishop chỉ được di chuyển đúng 1 ô mỗi lượt, hiệu lực 2 lượt. Nước dâng cuốn mọi thứ vào dòng chảy.', 
+            use: (r, c, p) => { this.water(r, c, p); this.addEffectSquare(); }
+          },
+          plant: { 
+            label: 'Rễ Cây Đan Kết', 
+            description: 'Gây 30 sát thương và trói chân toàn bộ quân trong vùng 5x5 suốt 2 lượt (không thể di chuyển). Void nhận sát thương gấp đôi, Plant và Light miễn dịch. Khi rễ cây siết chặt, mọi bước chân đều phải dừng lại.', 
+            use: (r, c, p) => { this.plant(r, c, p); this.addEffectSquare(); }
+          },
+          metal: { 
+            label: 'Bão Kim Sát Phạt', 
+            description: 'Tạo vùng hiểm địa 5x5 trong 2 lượt: bất kỳ ai di chuyển hoặc tấn công trong vùng đều nhận 50 sát thương. Plant chịu 100 sát thương, miễn nhiễm với Metal, Shadow. Thép lạnh trừng phạt mọi kẻ xâm nhập.', 
+            use: (r, c, p) => { this.metal(r, c, p); this.addEffectSquare(); }
+          },
+          energy: { 
+            label: 'Lôi Điện Tê Liệt', 
+            description: 'Ngẫu nhiên sốc điện 16 ô bất kỳ trên bàn cờ, gây 30 sát thương và làm tê liệt quân bị trúng (không thể di chuyển/đánh) trong 2 lượt. Metal nhận gấp đôi sát thương, Energy/Shadow miễn dịch. Dòng điện chạy xuyên suốt chiến trường.', 
+            use: (r, c, p) => { this.energy(r, c, p); this.addEffectSquare(); }
+          },
+          void: { 
+            label: 'Hố Đen Nuốt Chửng', 
+            description: 'Trong vùng 3x3 (trừ trung tâm), chọn ngẫu nhiên 4 ô: mỗi ô chứa quân đều bị giáng 100 sát thương. Energy nhận gấp đôi sát thương, Void/Light miễn nhiễm. Không gian vặn xoắn cuốn mọi vật vào hư vô.', 
+            use: (r, c, p) => { this.void(r, c, p); this.addEffectSquare(); }
+          },
+          light: { 
+            label: 'Thánh Quang Hồi Sinh', 
+            description: 'Hồi phục toàn bộ quân cờ lên đầy máu. Ánh sáng nhiệm màu đưa hy vọng cho những linh hồn hấp hối.', 
+            use: (r, c, p) => { this.light(p); this.addEffectSquare(); }
+          },
+          shadow: { 
+            label: 'Hắc Ám Bào Mòn', 
+            description: 'Tước đoạt sức mạnh: mọi quân cờ đang đầy máu (100) sẽ lập tức bị giảm còn 1 máu. Ánh đen lan rộng, sức sống bị rút cạn chỉ trong chớp mắt.', 
+            use: (r, c, p) => { this.shadow(p); this.addEffectSquare(); }
+          }
+        };
+        this.tempEffects = [];
+      }
+
+      area = (r, c, rad) => Array.from({ length: 2 * rad + 1 }, (_, i) => r - rad + i)
+        .flatMap(i => Array.from({ length: 2 * rad + 1 }, (_, j) => ({ row: i, col: c - rad + j })))
+        .filter(({ row, col }) => row >= 0 && row < 8 && col >= 0 && col < 8);
+
+      getPiecesInArea = q => {
+        const b = this.game.boardManager;
+        return q.map(({ row: r, col: c }) => {
+          const sq = b.getSquareByRowCol(r, c), p = b.getPieceInSquare(sq);
+          return p ? { piece: p, row: r, col: c } : null;
+        }).filter(x => x);
+      }
+
+      skillImmune = (p, a) => a.includes(p.dataset.element || '');
+
+      // Fire skill: 30 damage now, then 20 damage at turn end to all pieces standing in the 3x3 after
+      fire = (r, c, u) => {
+        // Gây 30 sát thương ban đầu với bonus Wind, immune Fire/Energy
+        this.getPiecesInArea(this.area(r, c, 1)).forEach(({ piece: p }) => {
+          if (p !== u && !this.skillImmune(p, ['fire', 'energy'])) {
+            let dmg = (p.dataset.element === 'wind' || p.dataset.secondElement === 'wind') ? 60 : 30;
+            this.applySkillDamage(p, dmg, 'Bùng Cháy Nhiệt Thành', u.dataset.element);
+          }
+        });
+        // Lưu hiệu ứng vùng lửa để gây 20 sát thương ở cuối lượt
+        this.tempEffects.push({
+          type: 'fireArea',
+          coords: this.area(r, c, 1),
+          turnsLeft: 2, // gây sau 1 "onTurnEnd" (tức cuối lượt kế)
+          immune: ['fire', 'energy'],
+          info: { source: 'fire' }
+        });
+      }
+      wind = (r, c, u) => [ [-1,0], [1,0], [0,-1], [0,1], [-1,-1], [-1,1], [1,-1], [1,1], [0,0] ].forEach(d => { let tr=r+d[0],tc=c+d[1]; if(tr<0||tr>7||tc<0||tc>7||(tr===r&&tc===c)) return; const sq=this.game.boardManager.getSquareByRowCol(tr,tc), p=this.game.boardManager.getPieceInSquare(sq); if(!p||this.skillImmune(p,["wind","void"])) return; let dmg=(p.dataset.element==="earth"||p.dataset.secondElement==="earth")?Math.floor(30*2):30, dr=d[0],dc=d[1],destR=tr+dr,destC=tc+dc; if(this.isInRootedArea(tr,tc)) { this.applySkillDamage(p,dmg,"Lốc Xoáy Đẩy Lùi",u.dataset.element); return; } if(destR>=0&&destR<8&&destC>=0&&destC<8) { const destSq=this.game.boardManager.getSquareByRowCol(destR,destC),destP=this.game.boardManager.getPieceInSquare(destSq); if(!destP&&!this.isInRootedArea(destR,destC)) { sq.removeChild(p); destSq.appendChild(p); this.applySkillDamage(p,dmg,"Lốc Xoáy Đẩy Lùi",u.dataset.element); } else { this.applySkillDamage(p,dmg,"Lốc Xoáy Đẩy Lùi",u.dataset.element); if(destP&&!this.skillImmune(destP,["wind","void"])) { let ex=(destP.dataset.element==="earth"||destP.dataset.secondElement==="earth")?Math.floor(dmg*2):dmg; this.applySkillDamage(destP,ex,"Lốc Xoáy Đẩy Lùi",u.dataset.element); } } } else this.applySkillDamage(p,70,"Lốc Xoáy Đẩy Lùi",u.dataset.element); });
+      earth = (r, c, u) => (this.getPiecesInArea(this.area(r, c, 2)).forEach(({ piece: p }) => !this.skillImmune(p, ['earth', 'metal']) && this.applySkillDamage(p, (p.dataset.element === 'water' || p.dataset.secondElement === 'water') ? 50 : 25, "Địa Giam Bất Động", u.dataset.element)), this.tempEffects.push({ type: 'blockArea', coords: this.area(r, c, 2), turnsLeft: 2, immune: ['earth', 'metal'], info: { source: 'earth' } }));
+      water = (r, c, u) => { const a = this.area(r, c, 3); this.getPiecesInArea(a).forEach(({ piece: p }) => !this.skillImmune(p, ['water', 'plant']) && this.applySkillDamage(p, (p.dataset.element === 'fire' || p.dataset.secondElement === 'fire') ? 40 : 20, "Mưa Lũ Dâng Cao", u.dataset.element)); this.tempEffects.push({ type: 'waterArea', coords: a, targets: ['queen', 'rook', 'bishop'], maxStep: 1, turnsLeft: 2, immune: ['water', 'plant'], info: { source: 'water' } }); }
+      plant = (r, c, u) => (this.getPiecesInArea(this.area(r, c, 2)).forEach(({ piece: p }) => !this.skillImmune(p, ['plant', 'light']) && this.applySkillDamage(p, (p.dataset.element === 'void' || p.dataset.secondElement === 'void') ? 60 : 30, "Bện Rễ Trói Chân", u.dataset.element)), this.tempEffects.push({ type: 'rootArea', coords: this.area(r, c, 2), turnsLeft: 2, immune: ['plant', 'light'], info: { source: 'plant' } }));
+      metal = (r, c, u) => this.tempEffects.push({ type: 'metalZone', coords: this.area(r, c, 2), dmg: 50, bonusElement: 'plant', bonusDmg: 100, immune: ['metal', 'shadow'], turnsLeft: 2, info: { source: 'metal' } });
+      energy = (_r, _c, userPiece) => {
+        // Sinh ngẫu nhiên 16 ô trên bàn cờ
+        const allSquares = [];
+        for (let i = 0; i < 8; i++) {
+          for (let j = 0; j < 8; j++) {
+            allSquares.push({ row: i, col: j });
+          }
+        }
+
+        // Trộn ngẫu nhiên và chọn 16 ô
+        const randomSquares = allSquares
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 16);
+
+        randomSquares.forEach(({ row, col }) => {
+          const square = this.game.boardManager.getSquareByRowCol(row, col);
+          const piece = this.game.boardManager.getPieceInSquare(square);
+
+          if (!piece) return;
+          if (this.skillImmune(piece, ['energy', 'shadow'])) return;
+
+          // Nếu trúng Metal nhận sát thương gấp đôi
+          const isMetal = 
+            piece.dataset.element === 'metal' ||
+            piece.dataset.secondElement === 'metal';
+
+          const damage = isMetal ? 60 : 30;
+
+          this.applySkillDamage(piece, damage, "Điện Giật Tê Liệt", userPiece.dataset.element);
+
+          // Làm tê liệt quân cờ trong 2 lượt
+          piece.dataset.paralyzed = "1";
+          this.tempEffects.push({
+            type: 'paralyze',
+            piece: piece,
+            turnsLeft: 2
+          });
+        });
+      }
+      void = (r, c, u) => this.area(r, c, 1).filter(({ row: x, col: y }) => (x !== r || y !== c)).sort(() => Math.random() - 0.5).slice(0, 4).forEach(({ row: x, col: y }) => { const sq = this.game.boardManager.getSquareByRowCol(x, y), p = this.game.boardManager.getPieceInSquare(sq); if (p && !this.skillImmune(p, ['void', 'light'])) { let d = (p.dataset.element === 'energy' || p.dataset.secondElement === 'energy') ? Math.floor(100 * 2) : 100; this.applySkillDamage(p, d, "Hố Đen Nuốt Chửng", u.dataset.element) } });
+      light = (u) => this.game.board.querySelectorAll('.piece').forEach(p => (parseInt(p.dataset.hp || this.game.baseHP, 10) < this.game.baseHP) ? (p.dataset.hp = this.game.baseHP, this.game.boardManager.updatePieceHPBar(p, this.game.baseHP)) : undefined);
+      shadow = (u) => this.game.board.querySelectorAll('.piece').forEach(p => (parseInt(p.dataset.hp || this.game.baseHP, 10) === this.game.baseHP) ? (p.dataset.hp = 1, this.game.boardManager.updatePieceHPBar(p, this.game.baseHP)) : undefined);
+
+      applySkillDamage = (p, d, s, e) => {
+        let h = parseInt(p.dataset.hp || this.game.baseHP, 10), n = h - d;
+        if (n < 0) n = 0;
+        this.game.showDamageOnPiece(p, { type: s, damage: d, element: e });
+        n <= 0
+          ? setTimeout(() => { p.remove() }, 2000)
+          : (p.dataset.hp = n, this.game.boardManager.updatePieceHPBar(p, this.game.baseHP));
+      }
+
+      isInBlockedArea = (row, col) => {
+        for (let eff of this.tempEffects) {
+          if (eff.type === 'blockArea' && eff.turnsLeft > 0) {
+            for (let coord of eff.coords)
+              if (coord.row === row && coord.col === col)
+                return true;
+          }
+        }
+        return false;
+      }
+      isInRootedArea = (row, col) => this.tempEffects.some(eff => eff.type === 'rootArea' && eff.turnsLeft > 0 && eff.coords.some(coord => coord.row === row && coord.col === col));
+
+      // Hàm này thêm class hiệu ứng vào các ô dựa trên tempEffects hiện tại
+      addEffectSquare = () => {
+        // Xoá toàn bộ effect class cũ
+        const effectTypes = [
+          'effect-fire',
+          'effect-water',
+          'effect-earth',
+          'effect-plant',
+          'effect-metal'
+        ];
+        for (let cl of effectTypes) {
+          this.game.board.querySelectorAll(`.${cl}`).forEach(sq => sq.classList.remove(cl));
+        }
+
+        // Lặp qua các effect đang active, gán lại class vào các ô
+        for (let eff of this.tempEffects) {
+          if (eff.turnsLeft > 0 && Array.isArray(eff.coords)) {
+            let effClass = null;
+            switch (eff.type) {
+              case 'fireArea':
+                effClass = 'effect-fire'; break;
+              case 'waterArea':
+                effClass = 'effect-water'; break;
+              case 'blockArea':
+                effClass = 'effect-earth'; break;
+              case 'rootArea':
+                effClass = 'effect-plant'; break;
+              case 'metalZone':
+                effClass = 'effect-metal'; break;
+              // Nếu muốn thêm style cho các vùng khác, thêm tại đây theo quy tắc effect-{element}
+            }
+            if (effClass) {
+              for (let { row, col } of eff.coords) {
+                const sq = this.game.boardManager.getSquareByRowCol(row, col);
+                if (sq) sq.classList.add(effClass);
+              }
+            }
+          }
+        }
+      }
+
+      onTurnEnd = () => {
+        // Xử lý hiệu ứng vùng lửa (fireArea) gây 20 sát thương lên các quân đang đứng trong vùng sau khi turnEnd
+        for (let eff of this.tempEffects) {
+          if (eff.type === 'fireArea' && eff.turnsLeft > 0) {
+            // Gây sát thương cho quân cờ vẫn còn đứng trong vùng
+            this.getPiecesInArea(eff.coords).forEach(({ piece: p }) => {
+              if (!this.skillImmune(p, eff.immune || ['fire', 'energy'])) {
+                // Nếu là Wind vẫn nhận double
+                let dmg = (p.dataset.element === 'wind' || p.dataset.secondElement === 'wind') ? 40 : 20;
+                this.applySkillDamage(p, dmg, 'Tro Nóng Âm ỉ', 'fire');
+              }
+            });
+          }
+        }
+        // Giảm turnsLeft & xoá hiệu ứng khi hết hạn
+        this.tempEffects = this.tempEffects.filter(e =>
+          e.turnsLeft !== undefined
+            ? (--e.turnsLeft, e.turnsLeft <= 0
+              ? (e.type === 'stun' && e.piece && delete e.piece.dataset.stunned,
+                 e.type === 'paralyze' && e.piece && delete e.piece.dataset.paralyzed, false)
+              : true)
+            : true
+        );
+        // Cập nhật hiệu ứng lên các ô
+        this.addEffectSquare();
+      };
+
+      getSkillsForPiece = p => {
+        const a = [];
+        const e = p.dataset.element;
+        if (e && this.skills[e]) a.push({ ...this.skills[e] });
+        return a;
+      }
+
+    }
+    
+    // Gốc vấn đề: mỗi lần gọi updateSelection thì gọi updateAllPieceHPBars, dẫn tới mỗi lần di chuyển selection thanh HP đều update lại
+    // Việc updateAllPieceHPBars (hoặc cụ thể là updatePieceHPBar) chỉ thực sự cần thiết khi hp bị thay đổi (ví dụ đòn tấn công, hoặc biến đổi HP do hiệu ứng)
+    // Đoạn dưới: KHÔNG xóa các mã nguồn khác, chỉ thay đổi updateSelection để không updateAllPieceHPBars mỗi lần di chuyển selection
+    class GameController {
+      constructor(){
+        this.board=document.getElementById('board');
+        this.filesBottom=document.getElementById('files-bottom');
+        this.ranksLeft=document.getElementById('ranks-left');
+        this.boardWrap=document.getElementById('board-wrap');
+        this.files=['a','b','c','d','e','f','g','h'];this.ranks=[8,7,6,5,4,3,2,1];
+        this.boardManager=new BoardManager(this.board,this.files,this.ranks);
+        this.gameRules=new ElementRules(this);
+        this.skillManager=new SkillManager(this);
+        // Expose for ElementRules isValidMove
+        window.gameSkillManager = this.skillManager;
+        this.initialSetup=null;
+        this.statusP1=document.querySelector('#status-p1 .piece-slot');
+        this.statusP2=document.querySelector('#status-p2 .piece-slot');
+        this.statusP1Under=document.querySelector('#status-p1 .under-slot');
+        this.statusP2Under=document.querySelector('#status-p2 .under-slot');
+        this.statusP1Stats=document.querySelector('#status-p1 .target-stats');
+        this.statusP2Stats=document.querySelector('#status-p2 .target-stats');
+        this.statusP1SelectedStats=document.querySelector('#status-p1 .selected-stats');
+        this.statusP2SelectedStats=document.querySelector('#status-p2 .selected-stats');
+        this.uiManager=new UIManager(this.statusP1,this.statusP2,this.statusP1Under,this.statusP2Under,this.statusP1Stats,this.statusP2Stats,this.statusP1SelectedStats,this.statusP2SelectedStats);
+        this.selRow=4;this.selCol=4;this.lastSelected=null;this.selRowRed=3;this.selColRed=3;this.lastSelectedRed=null;
+        this.blueHold=null;this.redHold=null;this.promotionMenu=null;
+        this.castlingReady={blue:null,red:null};
+        this.currentTurn=1;this.currentPlayerInTurn='white';this.turnDisplay=document.getElementById('count-turn');
+        this.playerMoveCount = { white: 0, black: 0 };
+        this.playerMovedPieceIds = { white: new Set(), black: new Set() };
+        this.baseHP=100;
+        this.baseDamage=100;
+        this.pieceIdCounter=0;
+        this.pendingAction=null;
+        this.actionMenu=null;
+        this.attackMenu=null;
+        this.attackSelectionIndex=0;
+        this.elementDamageMatrix={
+          fire:{bonus:['wind'],penalty:['fire','energy']},
+          wind:{bonus:['earth'],penalty:['wind','void']},
+          earth:{bonus:['water'],penalty:['earth','metal']},
+          water:{bonus:['fire'],penalty:['water','plant']},
+          plant:{bonus:['void'],penalty:['plant','light']},
+          metal:{bonus:['plant'],penalty:['metal','shadow']},
+          energy:{bonus:['metal'],penalty:['energy','shadow']},
+          void:{bonus:['energy'],penalty:['void','light']},
+          light:{bonus:['earth','wind','energy'],penalty:['light']},
+          shadow:{bonus:['fire','water','plant'],penalty:['shadow']}
+        };
+        this.handleKeyDown=this.handleKeyDown.bind(this);this.init();
+      }
+      showDamageOnPiece(pieceEl, { type = "normal", damage = 0, element = "" } = {}) {
+        if (!pieceEl) return; pieceEl.querySelectorAll(".piece-damage-indicator").forEach(e=>e.remove());
+        let skillName = (type && type !== "normal") ? type : "Tấn Công Thường", iconHTML = (element && ELEMENT_ICONS[element]) ? ' ' + ELEMENT_ICONS[element] : "";
+        const indicator = document.createElement("div");
+        indicator.className = "piece-damage-indicator";
+        // Tạm thời không truyền vào tên kỹ năng
+        indicator.innerHTML = `<span class="damage-skill"></span> <span class="damage-val">-${damage}</span>${iconHTML}`;
+        pieceEl.appendChild(indicator);
+        setTimeout(() => indicator.classList.add("visible"), 10);
+        setTimeout(() => { indicator.classList.remove("visible"); setTimeout(() => indicator.remove(), 550); }, 2000);
+      }
+      init(){
+        this.boardManager.renderBoard();
+        this.boardManager.renderLabels(this.filesBottom,this.ranksLeft);
+        this.initialSetup=this.gameRules.getInitialSetup();
+        this.boardManager.renderPieces(this.initialSetup);
+        this.addElementClassToPiece(this.initialSetup);
+        this.updateTurnDisplay();
+        this.updateSelection();
+        document.addEventListener('keydown',this.handleKeyDown);
+        setTimeout(()=>this.boardWrap.focus(),0);
+      }
+      addElementClassToPiece(initSetup){const files=this.files,setup=initSetup||this.initialSetup;for(let sq in setup){const cfg=setup[sq];if(!cfg)continue;const file=sq[0],rank=sq[1];let r=8-+rank,c=files.indexOf(file),cell=this.boardManager.getSquareByRowCol(r,c),p=this.boardManager.getPieceInSquare(cell);if(p&&cfg.element){this.initPieceAttributes(p,cfg.element);}}this.boardManager.updateAllPieceHPBars(this.baseHP);}
+      initPieceAttributes(pieceEl,element,hpValue,secondElement){
+        if(!pieceEl) return;
+        const hp = hpValue != null ? hpValue : this.baseHP;
+        pieceEl.classList.add('element-' + element);
+        pieceEl.dataset.element = element;
+        pieceEl.dataset.hp = hp;
+        // Thêm thuộc tính lastHp để lưu lượng máu trước khi thay đổi (ban đầu = hp khởi tạo)
+        pieceEl.dataset.lastHp = hp;
+        if(secondElement) {
+          pieceEl.classList.add('element2-' + secondElement);
+          pieceEl.dataset.secondElement = secondElement;
+        }
+        this.ensurePieceHasId(pieceEl);
+        this.boardManager.updatePieceHPBar(pieceEl, this.baseHP);
+      }
+      ensurePieceHasId(pieceEl){if(!pieceEl)return null;if(!pieceEl.dataset.pieceId){this.pieceIdCounter++;pieceEl.dataset.pieceId='piece-'+this.pieceIdCounter;}return pieceEl.dataset.pieceId;}
+      hasPieceAlreadyMoved(color,pieceEl){const id=this.ensurePieceHasId(pieceEl);if(!id)return false;const set=this.playerMovedPieceIds[color]||(this.playerMovedPieceIds[color]=new Set());return !!(set&&set.has(id));}
+      registerPieceMove(color,pieceEl){const id=this.ensurePieceHasId(pieceEl);if(!id)return;const set=this.playerMovedPieceIds[color]||(this.playerMovedPieceIds[color]=new Set());if(set&&!set.has(id)){set.add(id);this.playerMoveCount[color]=set.size;}}
+      resetMoveTrackerForColor(color){this.playerMoveCount[color]=0;const set=this.playerMovedPieceIds[color]||(this.playerMovedPieceIds[color]=new Set());set.clear();}
+      getMovementTargets(type, color, row, col) { return this.gameRules.getAllValidMoves(type, color, row, col, this.boardManager).filter(move => (move.row === row && move.col === col) || this.gameRules.isValidMove(type, color, row, col, move.row, move.col, this.boardManager)); }
+      getAttackTargets(type, color, row, col) {const E=color==='white'?'black':'white',S=8,I=(r,c)=>r>=0&&r<S&&c>=0&&c<S;return(['king','queen'].includes(type)?[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]:type==='rook'?[[-1,0],[1,0],[0,-1],[0,1]]:type==='bishop'?[[-1,-1],[-1,1],[1,-1],[1,1]]:type==='knight'?[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]:type==='pawn'?[[color==='white'?row-1:row+1,col-1],[color==='white'?row-1:row+1,col+1]]:[]).map(o=>type==='pawn'?[o[0],o[1]]:[row+o[0],col+o[1]]).filter(([r,c])=>I(r,c)).map(([r,c])=>{const sq=this.boardManager.getSquareByRowCol(r,c),p=this.boardManager.getPieceInSquare(sq);return p&&p.classList.contains(E)?{row:r,col:c,piece:p}:null;}).filter(Boolean);}
+      startActionPhase(color,row,col,pieceEl){this.pendingAction={color,row,col,pieceEl,type:this.gameRules.getPieceType(pieceEl.textContent.trim())};this.openActionMenu();}
+      openActionMenu(){
+        this.closeActionMenu();
+        if(!this.pendingAction)return;
+
+        const pieceEl = this.pendingAction.pieceEl;
+        const row = this.pendingAction.row;
+        const col = this.pendingAction.col;
+        const type = this.pendingAction.type;
+        const color = this.pendingAction.color;
+
+        const targets=this.getAttackTargets(type,color,row,col);
+
+        let actions = [
+          {id:'attack',label:'Tấn công',description:targets.length?'Tìm mục tiêu trong tầm để gây sát thương':'Không có quân địch nào trong tầm',enabled:targets.length>0}
+        ];
+
+        const pieceSkills = this.skillManager.getSkillsForPiece(pieceEl) || [];
+        pieceSkills.forEach((skill, idx) => {
+          actions.push({
+            id: "skill_" + (pieceEl.dataset.element || ''), // ví dụ: skill_fire
+            label: skill.label,
+            description: skill.description,
+            enabled: true,
+            useSkill: skill.use
+          });
+        });
+
+        actions.push({
+          id:'end',
+          label:'Kết thúc di chuyển',
+          description:'Chuyển lượt ngay cho đối thủ',
+          enabled:true
+        });
+
+        const enabledActions=actions.filter(a=>a.enabled);
+        if(enabledActions.length===1&&enabledActions[0].id==='end'){this.finishActionPhase();return;}
+
+        const overlay=document.createElement('div');overlay.className='action-menu-overlay';
+        const menu=document.createElement('div');menu.className='action-menu';
+        const title=document.createElement('div');title.className='action-title';title.textContent='Chọn hành động';
+        const subtitle=document.createElement('div');subtitle.className='action-subtitle';subtitle.textContent='Mỗi quân chỉ được thực hiện một hành động sau khi di chuyển.';
+        const list=document.createElement('div');list.className='action-list';
+        const buttons=[];
+        actions.forEach((action,idx)=>{const btn=document.createElement('button');btn.className='action-item';btn.dataset.index=idx;btn.disabled=!action.enabled;btn.innerHTML=`<span class="action-label">${action.label}</span><span class="action-desc">${action.description}</span>`;btn.addEventListener('click',()=>{this.triggerActionByIndex(idx);});list.appendChild(btn);buttons.push(btn);});
+        const hint=document.createElement('div');hint.className='action-hint';hint.textContent=this.getActionHintText();
+        menu.appendChild(title);menu.appendChild(subtitle);menu.appendChild(list);menu.appendChild(hint);overlay.appendChild(menu);document.body.appendChild(overlay);
+        const firstEnabledIndex=actions.findIndex(a=>a.enabled);
+        this.actionMenu={overlay,targets,actions,buttons,selectedIndex:firstEnabledIndex>=0?firstEnabledIndex:0};
+        this.updateActionMenuHighlight();
+      }
+      closeActionMenu(){if(this.actionMenu&&this.actionMenu.overlay){this.actionMenu.overlay.remove();}this.actionMenu=null;}
+      startAttackSelection(targets){this.closeActionMenu();if(!targets||!targets.length)return;this.attackSelectionIndex=0;this.boardManager.showValidMoves(targets.map(t=>({row:t.row,col:t.col,isCapture:true})));const overlay=document.createElement('div');overlay.className='attack-menu-overlay';const panel=document.createElement('div');panel.className='attack-menu';const title=document.createElement('div');title.className='attack-title';title.textContent='Chọn mục tiêu';const list=document.createElement('div');list.className='attack-targets';targets.forEach((t,i)=>{const btn=document.createElement('button');btn.className='attack-target';btn.textContent=this.formatTargetLabel(t);btn.dataset.index=i;btn.addEventListener('click',()=>{this.performAttack(t);});list.appendChild(btn);});const hint=document.createElement('div');hint.className='attack-hint';hint.textContent=(this.pendingAction&&this.pendingAction.color==='black')?'W/S: Chuyển mục tiêu | G: Xác nhận | F: Hủy':'↑/↓: Chuyển mục tiêu | Num2: Xác nhận | Num1: Hủy';panel.appendChild(title);panel.appendChild(list);panel.appendChild(hint);overlay.appendChild(panel);document.body.appendChild(overlay);this.attackMenu={overlay,list,targets};this.updateAttackSelectionHighlight();}
+      closeAttackSelection(){if(this.attackMenu&&this.attackMenu.overlay)this.attackMenu.overlay.remove();this.attackMenu=null;this.boardManager.clearValidMoves();}
+      updateAttackSelectionHighlight(){if(!this.attackMenu)return;const buttons=this.attackMenu.list.querySelectorAll('.attack-target');buttons.forEach(btn=>btn.classList.remove('active'));const active=buttons[this.attackSelectionIndex];active&&active.classList.add('active');}
+      updateActionMenuHighlight(){if(!this.actionMenu)return;this.actionMenu.buttons.forEach((btn,idx)=>{btn.classList.toggle('active',idx===this.actionMenu.selectedIndex);});}
+      moveActionSelection(step){if(!this.actionMenu)return;const total=this.actionMenu.actions.length;let nextIndex=this.actionMenu.selectedIndex;for(let i=0;i<total;i++){nextIndex=(nextIndex+step+total)%total;if(this.actionMenu.actions[nextIndex].enabled){this.actionMenu.selectedIndex=nextIndex;this.updateActionMenuHighlight();break;}}}
+      triggerActionByIndex(index){if(!this.actionMenu)return;const a=this.actionMenu.actions[index];if(!a||!a.enabled)return;this.actionMenu.selectedIndex=index;this.updateActionMenuHighlight();(a.id&&a.id.startsWith("skill_")&&typeof a.useSkill==="function")?(a.useSkill(this.pendingAction.row,this.pendingAction.col,this.pendingAction.pieceEl),this.finishActionPhase()):this.executeSelectedAction(a);}
+      triggerEndAction(){if(!this.actionMenu)return;const idx=this.actionMenu.actions.findIndex(a=>a.id==='end');if(idx>=0)this.triggerActionByIndex(idx);}
+      executeSelectedAction(action){action.id==='attack'?this.startAttackSelection(this.actionMenu.targets||[]):action.id==='end'&&this.finishActionPhase();}
+      getActionHintText(){const isWhite=this.pendingAction?.color!=='black';return isWhite?'↑/↓: Di chuyển | Num2: Xác nhận | Num1: Kết thúc':'W/S: Di chuyển | G: Xác nhận | F: Kết thúc';}
+      handleActionMenuKey(e){const color = this.pendingAction?.color || 'white';if (!this.actionMenu) return;const key = e.key.toLowerCase();if ((color !== 'black' && (key === 'arrowdown' || key === 'arrowup')) || (color === 'black' && (key === 'w' || key === 's'))){e.preventDefault();if ((color !== 'black' && key === 'arrowdown') || (color === 'black' && key === 's')) {this.moveActionSelection(1);} else if ((color !== 'black' && key === 'arrowup') || (color === 'black' && key === 'w')) {this.moveActionSelection(-1);}return;}const confirmKeys = color === 'black' ? ['g', ' '] : ['2', 'numpad2', ' '];if (confirmKeys.includes(key)) {e.preventDefault();this.triggerActionByIndex(this.actionMenu.selectedIndex);return;}const cancelKeys = color === 'black' ? ['f'] : ['1', 'numpad1'];if (cancelKeys.includes(key)) {e.preventDefault();this.triggerEndAction();}}
+      handleAttackSelectionKey(e){const color = this.pendingAction?.color || 'white';if(!this.attackMenu) return;const keyRaw = e.key;const key = keyRaw.toLowerCase();if (color !== 'black') {if (key === '1' || e.code === 'Numpad1') {e.preventDefault();this.closeAttackSelection();this.pendingAction && this.openActionMenu();return;}if (key === '2' || e.code === 'Numpad2') {e.preventDefault();const target = this.attackMenu.targets[this.attackSelectionIndex];this.performAttack(target);return;}if (key === 'arrowdown') {e.preventDefault();this.cycleAttackSelection(1);return;}if (key === 'arrowup') {e.preventDefault();this.cycleAttackSelection(-1);return;}} else {if (key === 'f') {e.preventDefault();this.closeAttackSelection();this.pendingAction && this.openActionMenu();return;}if (key === 'g') {e.preventDefault();const target = this.attackMenu.targets[this.attackSelectionIndex];this.performAttack(target);return;}if (key === 's') {e.preventDefault();this.cycleAttackSelection(1);return;}if (key === 'w') {e.preventDefault();this.cycleAttackSelection(-1);return;}}}
+      cycleAttackSelection(step){if(!this.attackMenu)return;const len=this.attackMenu.targets.length;if(!len)return;this.attackSelectionIndex=(this.attackSelectionIndex+step+len)%len;this.updateAttackSelectionHighlight();}
+      finishActionPhase(){const action=this.pendingAction;const color=action?action.color:null;const pieceEl=action?action.pieceEl:null;this.pendingAction=null;this.closeActionMenu();this.closeAttackSelection();if(color){this.registerPieceMove(color,pieceEl);this.updateTurnAfterMove(color);}this.updateSelection();setTimeout(()=>this.boardWrap.focus(),0);}
+      performAttack(target){if(!this.pendingAction)return;const attackerEl=this.pendingAction.pieceEl;const attackerElement=attackerEl.dataset.element||'';const targetSq=this.boardManager.getSquareByRowCol(target.row,target.col);const defender=this.boardManager.getPieceInSquare(targetSq);if(!defender){this.finishActionPhase();return;}const defenderElement=defender.dataset.element||'';const dmg=this.computeDamage(attackerElement,defenderElement);const currentHP=parseInt(defender.dataset.hp||this.baseHP,10);const remaining=currentHP-dmg;const attackerColor=this.pendingAction.color;const defenderColor=defender.classList.contains('black')?'black':'white';this.showDamageOnPiece(defender,{type: "normal",damage: dmg,element: attackerElement});if(remaining<=0){EffectManager.triggerPsionicClash(targetSq,attackerColor,defenderColor,defender);setTimeout(()=>{defender.remove();}, 2000);}else{defender.dataset.hp=remaining;this.boardManager.updatePieceHPBar(defender, this.baseHP);}EffectManager.triggerFieldResonance(targetSq,attackerColor);this.finishActionPhase();}
+      computeDamage(attackerElement,defenderElement){let dmg=this.baseDamage;const matrix=this.elementDamageMatrix[attackerElement]||{};if(matrix.bonus&&matrix.bonus.includes(defenderElement))dmg+=50;if(matrix.penalty&&matrix.penalty.includes(defenderElement))dmg-=50;return Math.max(0,dmg);}
+      formatTargetLabel(target){const sq=this.getSquareNotation(target.row,target.col);const piece=target.piece?target.piece.textContent.trim():'?';const hp=target.piece?target.piece.dataset.hp||this.baseHP:this.baseHP;let el=target.piece?target.piece.dataset.element||'-':'-';let el2=target.piece?target.piece.dataset.secondElement||'':'';if(el2) el = el + ' + ' + el2;return `${sq} • ${piece} • HP: ${hp} • ${el}`;}
+      getSquareNotation(row,col){return `${this.files[col]}${this.ranks[row]}`;}
+      updateSelection() {
+        // Chỉ cập nhật selection và thông tin panel, không updateAllPieceHPBars ở đây nữa!
+        const r = this.uiManager.updateSelection(this.lastSelected, this.lastSelectedRed, this.selRow, this.selCol, this.selRowRed, this.selColRed, this.boardManager);
+        this.lastSelected = r.lastSelected;
+        this.lastSelectedRed = r.lastSelectedRed;
+        this.uiManager.updateStatusPanels(this.blueHold, this.redHold, this.selRow, this.selCol, this.selRowRed, this.selColRed, this.boardManager);
+        // không gọi: this.boardManager.updateAllPieceHPBars(this.baseHP);
+      }
+      updateTurnAfterMove(color) {
+        const MOVES_PER_TURN = 2;
+        const moves = this.playerMoveCount[color] || 0;
+
+        if (moves >= MOVES_PER_TURN) {
+          const nextColor = color === 'white' ? 'black' : 'white';
+          
+          this.resetMoveTrackerForColor(color);
+          this.resetMoveTrackerForColor(nextColor);
+          this.skillManager.onTurnEnd();
+          this.currentPlayerInTurn = nextColor;
+
+          if (nextColor === 'white') {
+            this.currentTurn++;
+            this.updateTurnDisplay();
+          }
+        } else {
+          this.currentPlayerInTurn = color;
+        }
+      }
+      updateTurnDisplay(){if(this.turnDisplay)this.turnDisplay.textContent=this.currentTurn;}
+      pickOrCancel(params) {
+        // params: { color, selRow, selCol, holdKey, castlingKey }
+        const { color, selRow, selCol, holdKey, castlingKey } = params;
+        if (this.currentPlayerInTurn !== color) return;
+        const row = selRow, col = selCol;
+        const sq = this.boardManager.getSquareByRowCol(row, col);
+
+        if (!this[holdKey]) {
+          const pc = this.boardManager.getPieceInSquare(sq);
+          if (pc) {
+            // Kiểm tra tê liệt
+            if (pc.dataset.paralyzed === "1" || pc.dataset.paralyzed === "true") {
+              this.uiManager?.showToast?.("Quân cờ này đang bị tê liệt (Energy) và không thể chọn!", "warning");
+              return;
+            }
+            if (!pc.classList.contains(color)) return;
+            if (this.hasPieceAlreadyMoved(color, pc)) return;
+            const ch = pc.textContent ? pc.textContent.trim() : "";
+            const type = this.gameRules.getPieceType(ch) || 'pawn';
+            const element = pc.dataset.element ?? 'none';
+
+            if (type === 'king') {
+              this[holdKey] = {
+                fromRow: row,
+                fromCol: col,
+                pieceEl: pc,
+                type: 'king',
+                color: color,
+                element: element
+              };
+              pc.remove();
+              EffectManager.triggerPsionicResidue(sq, color);
+              const v = this.gameRules.getAllValidMoves('king', color, row, col, this.boardManager).filter(m => !m.isCastlingTarget || m.isCastlingTarget);
+              this.boardManager.showValidMoves(v, color);
+            } else {
+              this[holdKey] = {
+                fromRow: row,
+                fromCol: col,
+                pieceEl: pc,
+                type: type,
+                color: color,
+                element: element
+              };
+              pc.remove();
+              EffectManager.triggerPsionicResidue(sq, color);
+              this.boardManager.showValidMoves(
+                this.gameRules.getAllValidMoves(type, color, row, col, this.boardManager).filter(m => !m.isCastlingTarget), color
+              );
+            }
+          }
+        } else {
+          if (this.castlingReady[castlingKey]) {
+            this.castlingReady[castlingKey] = null;
+            this.boardManager.clearValidMoves();
+          } else {
+            // Thả về chỗ cũ
+            const org = this.boardManager.getSquareByRowCol(this[holdKey].fromRow, this[holdKey].fromCol);
+            if (this.boardManager.isSquareEmpty(org)) {
+              org.appendChild(this[holdKey].pieceEl);
+            }
+            this[holdKey] = null;
+            this.boardManager.clearValidMoves();
+          }
+        }
+        this.updateSelection();
+      }
+      pickOrCancelBlue() {
+        this.pickOrCancel({
+          color: 'white',
+          selRow: this.selRow,
+          selCol: this.selCol,
+          holdKey: 'blueHold',
+          castlingKey: 'blue'
+        });
+      }
+      pickOrCancelRed() {
+        this.pickOrCancel({
+          color: 'black',
+          selRow: this.selRowRed,
+          selCol: this.selColRed,
+          holdKey: 'redHold',
+          castlingKey: 'red'
+        });
+      }
+      dropPiece(options) {
+        /*
+          options = {
+            color: 'white'|'black',
+            holdKey: 'blueHold'|'redHold',
+            selRow: number,
+            selCol: number,
+            castlingKey: 'blue'|'red',
+            promotionGroup: 'blue'|'red'
+          }
+        */
+        const {
+          color,
+          holdKey,
+          selRow,
+          selCol,
+          castlingKey,
+          promotionGroup
+        } = options;
+
+        if (this.currentPlayerInTurn !== color) return;
+        const hold = this[holdKey];
+        if (!hold) return;
+
+        const t = this.boardManager.getSquareByRowCol(selRow, selCol),
+          tp = this.boardManager.getPieceInSquare(t),
+          ch = hold.pieceEl.textContent.trim(),
+          type = hold.type,
+          mainEl = hold.element,
+          mainHp = parseInt(hold.pieceEl.dataset.hp || this.baseHP, 10);
+
+        // Metal zone hiệu ứng (dùng lại)
+        const handleMetalZoneOnDrop = (piece, toRow, toCol, fromRow, fromCol) => {
+          // Kiểm tra vị trí hiện tại
+          if (typeof fromRow === 'number' && typeof fromCol === 'number') {
+            for (const eff of this.skillManager?.tempEffects || []) {
+              if (
+                eff.type === 'metalZone' &&
+                eff.turnsLeft > 0 &&
+                eff.coords.some(coord => coord.row === fromRow && coord.col === fromCol)
+              ) {
+                if (
+                  eff.immune && (
+                    (piece.dataset.element && eff.immune.includes(piece.dataset.element)) ||
+                    (piece.dataset.secondElement && eff.immune.includes(piece.dataset.secondElement))
+                  )
+                ) continue;
+                let dmg = eff.dmg || 50;
+                if (
+                  eff.bonusElement &&
+                  (piece.dataset.element === eff.bonusElement || piece.dataset.secondElement === eff.bonusElement)
+                ) {
+                  dmg = eff.bonusDmg || dmg;
+                }
+                this.skillManager.applySkillDamage(piece, dmg, "Bẫy Sét Kim Loại", "metal");
+              }
+            }
+          }
+          // Kiểm tra điểm đến
+          for (const eff of this.skillManager?.tempEffects || []) {
+            if (
+              eff.type === 'metalZone' &&
+              eff.turnsLeft > 0 &&
+              eff.coords.some(coord => coord.row === toRow && coord.col === toCol)
+            ) {
+              if (
+                eff.immune && (
+                  (piece.dataset.element && eff.immune.includes(piece.dataset.element)) ||
+                  (piece.dataset.secondElement && eff.immune.includes(piece.dataset.secondElement))
+                )
+              ) continue;
+              let dmg = eff.dmg || 50;
+              if (
+                eff.bonusElement &&
+                (piece.dataset.element === eff.bonusElement || piece.dataset.secondElement === eff.bonusElement)
+              ) {
+                dmg = eff.bonusDmg || dmg;
+              }
+              this.skillManager.applySkillDamage(piece, dmg, "Bẫy Sét Kim Loại", "metal");
+            }
+          }
+        };
+
+        // Chỗ này kiểm tra nước đi hợp lệ để đặt quân xuống
+        // 3. Nếu đặt vào ô đã có quân đối phương: không hợp lệ
+        if (tp) return;
+
+        // 1. Xử lý castling (di chuyển vua và xe)
+        if (type === 'king') {
+          // Lấy tất cả nước đi castling hợp lệ
+          const cs = this.gameRules.getCastlingTargetsForKing(color, hold.fromRow, hold.fromCol, this.boardManager),
+            isCastling = cs.some(m => m.row === selRow && m.col === selCol);
+          if (isCastling && tp) {
+            const rp = tp, rr = selRow, rc = selCol;
+            // Nếu thực sự thực hiện được castling với quân xe ở đúng vị trí đó
+            if (this.gameRules.performCastlingByRook(color, hold.fromRow, hold.fromCol, rr, rc, this.boardManager, hold.pieceEl, rp)) {
+              this.gameRules.onPieceMoved('king', color, hold.fromRow, hold.fromCol, -1, -1);
+              // Xác định vị trí vua sau castling
+              const kingRow = (color === 'white') ? 7 : 0, kingCol = rc === 7 ? 6 : 2;
+              const kingSquare = this.boardManager.getSquareByRowCol(kingRow, kingCol);
+              const placed = this.boardManager.getPieceInSquare(kingSquare);
+              EffectManager.triggerFieldResonance(kingSquare, color);
+              this.boardManager.updateAllPieceHPBars(this.baseHP);
+              this[holdKey] = null;
+              this.boardManager.clearValidMoves();
+              this.castlingReady[castlingKey] = null;
+              this.updateSelection();
+              this.startActionPhase(color, kingRow, kingCol, placed);
+              return;
+            }
+          }
+        }
+
+        // 4. Kiểm tra nước đi chuẩn tắc - chính chỗ này là kiểm tra nước đi hợp lệ để đặt quân
+        if (!type || !this.gameRules.isValidMove(type, color, hold.fromRow, hold.fromCol, selRow, selCol, this.boardManager)) return;
+
+        // 2. Nếu đặt xuống một ô đã có quân cùng màu
+        if (tp && tp.classList.contains(color)) { // hợp nhất điều kiện màu
+          if (tp === hold.pieceEl) return;
+          const secEl = tp.dataset.element,
+            secHp = parseInt(tp.dataset.hp || this.baseHP, 10),
+            targetIsKing = tp.textContent.trim() === '♔' || tp.textContent.trim() === '♚';
+          // Không cho hợp nhất nếu là vua
+          if (targetIsKing) return;
+          // Không cho hợp nhất nếu hai element giống nhau
+          if (mainEl && secEl && mainEl === secEl) return;
+          const newHp = Math.min(mainHp + secHp, this.baseHP);
+          this.initPieceAttributes(hold.pieceEl, mainEl, newHp, secEl);
+          tp.remove();
+          t.appendChild(hold.pieceEl);
+
+          handleMetalZoneOnDrop(hold.pieceEl, selRow, selCol, hold.fromRow, hold.fromCol);
+
+          EffectManager.triggerFieldResonance(t, color);
+          const placedPiece = this.boardManager.getPieceInSquare(t);
+          this.boardManager.updatePieceHPBar(placedPiece, this.baseHP);
+          this[holdKey] = null;
+          this.boardManager.clearValidMoves();
+          this.updateSelection();
+          this.startActionPhase(color, selRow, selCol, placedPiece);
+          return;
+        }
+
+        // 5. Xử lý phong cấp nếu là tốt đi tới cuối bàn cờ
+        const isPawnPromotion = (
+          type === 'pawn' &&
+          ((color === 'white' && selRow === 0 && (hold.fromRow !== 0 || hold.fromCol !== selCol))
+          || (color === 'black' && selRow === 7 && (hold.fromRow !== 7 || hold.fromCol !== selCol)))
+        );
+
+        if (isPawnPromotion) {
+          const promo = this.gameRules.getPromotionPieces(),
+            pwEl = hold.pieceEl,
+            fr = hold.fromRow,
+            fc = hold.fromCol,
+            _mainEl = hold.element;
+          this.promotionMenu = this.uiManager.showPromotionMenu(promotionGroup, color, promo, this.boardWrap, idx => {
+            const pcs = promo[color], pch = pcs[idx];
+            this.promotionMenu && this.promotionMenu.remove();
+            this.promotionMenu = null;
+            pwEl && pwEl.parentNode && pwEl.remove();
+            const place = () => {
+              const np = document.createElement('span');
+              np.className = 'piece ' + color;
+              np.textContent = pch;
+              const el = this.gameRules.getRandomElementType();
+              this.initPieceAttributes(np, el);
+              t.appendChild(np);
+
+              handleMetalZoneOnDrop(np, selRow, selCol, fr, fc);
+
+              this.boardManager.updatePieceHPBar(np, this.baseHP);
+              EffectManager.triggerFieldResonance(t, color);
+              this.updateSelection();
+              this.startActionPhase(color, selRow, selCol, np);
+            };
+            place();
+            this[holdKey] = null;
+            this.boardManager.clearValidMoves();
+            setTimeout(() => this.boardWrap.focus(), 0);
+          }, () => {
+            this.promotionMenu && this.promotionMenu.remove();
+            this.promotionMenu = null;
+            const org = this.boardManager.getSquareByRowCol(fr, fc);
+            if (org && this.boardManager.isSquareEmpty(org)) org.appendChild(pwEl);
+            this[holdKey] = null;
+            this.boardManager.clearValidMoves();
+            this.updateSelection();
+            setTimeout(() => this.boardWrap.focus(), 0);
+          });
+          return;
+        }
+
+        // 6. Khi tất cả điều kiện hợp lệ, đặt quân vào ô mới
+        t.appendChild(hold.pieceEl);
+
+        handleMetalZoneOnDrop(hold.pieceEl, selRow, selCol, hold.fromRow, hold.fromCol);
+
+        this.gameRules.onPieceMoved(type, color, hold.fromRow, hold.fromCol, selRow, selCol);
+        EffectManager.triggerFieldResonance(t, color);
+        const placedPiece = this.boardManager.getPieceInSquare(t);
+        this.boardManager.updatePieceHPBar(placedPiece, this.baseHP);
+        this[holdKey] = null;
+        this.boardManager.clearValidMoves();
+        this.updateSelection();
+        this.startActionPhase(color, selRow, selCol, placedPiece);
+      }
+      dropBlue() {
+        this.dropPiece({
+          color: "white",
+          holdKey: "blueHold",
+          selRow: this.selRow,
+          selCol: this.selCol,
+          castlingKey: "blue",
+          promotionGroup: "blue"
+        });
+      }
+      dropRed() {
+        this.dropPiece({
+          color: "black",
+          holdKey: "redHold",
+          selRow: this.selRowRed,
+          selCol: this.selColRed,
+          castlingKey: "red",
+          promotionGroup: "red"
+        });
+      }
+      
+      handleKeyDown(e){
+        if(this.promotionMenu)return;
+        if(this.attackMenu){this.handleAttackSelectionKey(e);return;}
+        if(this.actionMenu){this.handleActionMenuKey(e);return;}
+        let h=false,k=e.key.toLowerCase();
+
+        // Show element chart on dot "."
+        if (k === '.') {
+          this.uiManager.showElementChart();
+          h = true;
+        }
+
+        switch(k){
+          case 'arrowup':if(this.selRow>0){this.selRow--;h=true;}break;
+          case 'arrowdown':if(this.selRow<7){this.selRow++;h=true;}break;
+          case 'arrowleft':if(this.selCol>0){this.selCol--;h=true;}break;
+          case 'arrowright':if(this.selCol<7){this.selCol++;h=true;}break;
+          case '1':if(this.currentPlayerInTurn === 'white'){this.pickOrCancelBlue();h=true;}break;
+          case '2':if(this.currentPlayerInTurn==='white'){this.dropBlue();h=true;}break;
+          case 'w':if(this.selRowRed>0){this.selRowRed--;h=true;}break;
+          case 's':if(this.selRowRed<7){this.selRowRed++;h=true;}break;
+          case 'a':if(this.selColRed>0){this.selColRed--;h=true;}break;
+          case 'd':if(this.selColRed<7){this.selColRed++;h=true;}break;
+          case 'f':if(this.currentPlayerInTurn === 'black'){this.pickOrCancelRed();h=true;}break;
+          case 'g':if(this.currentPlayerInTurn==='black'){this.dropRed();h=true;}break;
+          case ' ':
+            this.playerMoveCount = { white: 0, black: 0 };
+            this.playerMovedPieceIds = { white: new Set(), black: new Set() };
+            h = true;break;
+        }
+        if(!h){
+          if(e.code==='Numpad1'){if(this.currentPlayerInTurn === 'white'){this.pickOrCancelBlue();h=true;}}
+          else if(e.code==='Numpad2'){if(this.currentPlayerInTurn==='white'){this.dropBlue();h=true;}}
+        }
+        if(h){e.preventDefault();this.updateSelection();}
+      }
+
+    }
+    new GameController();
+  </script>
+</body>
+</html>
+

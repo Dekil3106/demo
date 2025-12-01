@@ -1,0 +1,401 @@
+/* Icon overlay for elemental pieces */
+.piece::after {
+  content: "";
+  position: absolute;
+  top: 6%;
+  right: 6%;
+  width: clamp(14px, calc(var(--board-size) / 18), 28px);
+  height: clamp(14px, calc(var(--board-size) / 18), 28px);
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+.piece[data-element]::after {
+  opacity: 1;
+}
+.piece[data-element="fire"]::after {
+  background-image: url("../img/elements/FIRE.png");
+}
+.piece[data-element="wind"]::after {
+  background-image: url("../img/elements/WIND.png");
+}
+.piece[data-element="earth"]::after {
+  background-image: url("../img/elements/EARTH.png");
+}
+.piece[data-element="water"]::after {
+  background-image: url("../img/elements/WATER.png");
+}
+.piece[data-element="plant"]::after {
+  background-image: url("../img/elements/PLANT.png");
+}
+.piece[data-element="metal"]::after {
+  background-image: url("../img/elements/METAL.png");
+}
+.piece[data-element="energy"]::after {
+  background-image: url("../img/elements/ENERGY.png");
+}
+.piece[data-element="void"]::after {
+  background-image: url("../img/elements/VOID.png");
+}
+.piece[data-element="light"]::after {
+  background-image: url("../img/elements/LIGHT.png");
+}
+.piece[data-element="shadow"]::after {
+  background-image: url("../img/elements/SHADOW.png");
+}
+
+.action-menu-overlay,
+.attack-menu-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(7, 10, 25, 0.55);
+  backdrop-filter: blur(6px);
+  z-index: 999;
+}
+.action-menu,
+.attack-menu {
+  width: min(360px, 90vw);
+  border-radius: 18px;
+  padding: 24px;
+  text-align: left;
+  color: #f5f7ff;
+  background: linear-gradient(145deg, #101b36 0%, #1c2f5b 60%, #273b74 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 24px 60px rgba(7,10,25,0.55);
+  font-family: inherit;
+}
+.action-title,
+.attack-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.action-subtitle {
+  font-size: 14px;
+  color: rgba(245,247,255,0.75);
+  margin-top: 6px;
+}
+.action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 18px 0 12px;
+}
+.action-item {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+  font-size: 15px;
+}
+.action-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.action-item:not(:disabled):hover,
+.action-item.active {
+  border-color: rgba(111,240,255,0.8);
+  background: rgba(111,240,255,0.15);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.3);
+  transform: translateY(-1px);
+}
+.action-label {
+  font-weight: 600;
+  font-size: 16px;
+}
+.action-desc {
+  font-size: 13px;
+  color: rgba(245,247,255,0.78);
+  line-height: 1.6;
+  text-align: justify;
+  padding: 0 6px
+}
+.action-hint,
+.attack-hint {
+  font-size: 13px;
+  color: rgba(245,247,255,0.65);
+  white-space: pre-line;
+}
+.attack-menu {
+  width: min(420px, 92vw);
+}
+.attack-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0 12px;
+}
+.attack-target {
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  padding: 12px 14px;
+  color: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.attack-target.active,
+.attack-target:not(:disabled):hover {
+  border-color: rgba(255,209,102,0.85);
+  background: rgba(255,209,102,0.16);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+  transform: translateY(-1px);
+}
+
+/* CSS cho thanh máu của quân cờ: */
+
+.piece {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.piece-hpbar {
+  position: absolute;
+  bottom: 5%;           /* nằm trên quân cờ */
+  left: 5%;          /* lệch nhẹ sang trái */
+  width: 90%;         /* thanh ngang */
+  height: 6px;
+  background: #ddd;
+  border-radius: 3px;
+  overflow: hidden;
+  z-index: 2;
+  box-shadow: 0 0 2px #aaa;
+  pointer-events: none;
+
+  display: flex;
+  justify-content: flex-start;   /* fill từ trái sang phải */
+  align-items: center;
+}
+
+/* Fill chạy theo chiều ngang */
+.piece-hpbar-fill {
+  height: 100%;
+  width: 100%; /* sẽ bị override bằng JS */
+  background: linear-gradient(to right, #2ecc71, #74f9b3 60%, #d4ffe1 100%);
+  /* Hiệu ứng tụt máu giảm dần trong 1.5s */
+  transition: width 1.5s cubic-bezier(.18,.84,.36,1.18);
+  border-radius: 3px;
+}
+
+/* Label HP (nếu bạn cần) */
+/* .piece-hpbar-label {
+  position: absolute;
+  top: -8px;
+  left: 42px;
+  font-size: 12px;
+  color: #c63;
+  font-family: sans-serif;
+  pointer-events: none;
+  text-shadow: 1px 1px 2px #fff, 1px 1px 1px #ffeca0;
+  z-index: 2;
+  display: none;
+} */
+
+.piece[data-hp][data-hp]:not([data-hp="100"]) .piece-hpbar-label {
+  display: block;
+}
+
+
+/* ======= STYLE cho hiệu ứng damage sát thương và icon nguyên tố ======= */
+.piece-damage-indicator {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  position: absolute;
+  left: 50%;
+  top: 5px;
+  transform: translate(-50%,0) scale(1);
+  pointer-events: none;
+  z-index: 8;
+  font-size: 12px;
+  font-family: 'Montserrat', 'Segoe UI', 'Arial Rounded MT Bold', Arial, sans-serif;
+  font-weight: 650;
+  opacity: 0;
+  transition: 
+    opacity 0.18s cubic-bezier(.54,-0.01,.42,1.18), 
+    transform 0.35s cubic-bezier(.54,-0.01,.42,1.18);
+  white-space: nowrap;
+  text-shadow: 0 2px 2px #000a;
+  pointer-events: none;
+}
+.piece-damage-indicator.visible {
+  opacity: 1;
+  transform: translate(-50%,-32px) scale(1.15);
+}
+.piece-damage-indicator .damage-skill {
+  /* margin-right: 5px; */
+  color: #ffffff;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+}
+.piece-damage-indicator .damage-val {
+  color: #ff3e29;
+  font-weight: 800;
+  font-size: 16px;
+  margin: 0 5px;
+  display: flex;
+  align-items: center;
+}
+/* --- Element icons: Ví dụ cho lửa --- */
+.icon-element {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  vertical-align: middle;
+  /* margin-right: 5px; */
+  /* Đảm bảo căn giữa icon với text theo chiều dọc */
+}
+
+.icon-element.icon-fire   { background-image: url("../img/elements/FIRE.png"); }
+.icon-element.icon-water  { background-image: url("../img/elements/WATER.png"); }
+.icon-element.icon-earth  { background-image: url("../img/elements/EARTH.png"); }
+.icon-element.icon-wind   { background-image: url("../img/elements/WIND.png"); }
+.icon-element.icon-plant  { background-image: url("../img/elements/PLANT.png"); }
+.icon-element.icon-metal  { background-image: url("../img/elements/METAL.png"); }
+.icon-element.icon-energy { background-image: url("../img/elements/ENERGY.png"); }
+.icon-element.icon-void   { background-image: url("../img/elements/VOID.png"); }
+.icon-element.icon-light  { background-image: url("../img/elements/LIGHT.png"); }
+.icon-element.icon-shadow { background-image: url("../img/elements/SHADOW.png"); }
+
+.square {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  transition: background-color 120ms ease;
+}
+
+/* Default board backgrounds */
+.square.light { background: var(--light); }
+.square.dark  { background: var(--dark); }
+
+.square:hover {
+  outline: 2px solid rgba(0,0,0,0.15);
+  background-image: radial-gradient(var(--square-hover), var(--square-hover));
+}
+.square.active {
+  background-image: radial-gradient(var(--square-active), var(--square-active));
+}
+.square.selected {
+  outline: 10px solid #2196f3;
+  outline-offset: -10px;
+}
+.square.selected-red {
+  outline: 10px solid #e53935;
+  outline-offset: -10px;
+}
+
+/* --- Elemental tile effect overlays (only shown when matching tempEffects) --- */
+.square.effect-fire {
+  /* Overlay a flickering, reddish glow for fire area */
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(255,80,0,0.3) 55%, transparent 100%),
+    repeating-conic-gradient(from 0deg, #fd440044 0% 15%, #a2461a33 30% 40%, transparent 60% 100%);
+  box-shadow: 0 0 18px 6px #fd3927b6, 0 0 62px 8px #fda72790;
+  animation: fire-flicker 1.2s infinite alternate;
+}
+@keyframes fire-flicker {
+  0% { box-shadow: 0 0 20px 8px #fd392770, 0 0 62px 10px #fda72760; }
+  30% { box-shadow: 0 0 18px 6px #fd3927ba, 0 0 88px 22px #ff8620d0; }
+  55% { box-shadow: 0 0 23px 6px #d87b23aa, 0 0 80px 12px #ef434390; }
+  100% { box-shadow: 0 0 18px 6px #fd3927b6, 0 0 62px 8px #fda72790; }
+}
+
+.square.effect-water {
+  /* Overlay watery blue/teal shimmer for water area */
+  background:
+    radial-gradient(circle at 60% 30%, #6ecaff55 45%, transparent 80%),
+    repeating-linear-gradient(135deg, #6ee0f4b8 10px, #91c9fa30 30px, transparent 80px);
+  box-shadow: 0 0 16px 3px #66bcfa5a, 0 0 36px 5px #93f3f670;
+  animation: water-wave 2.4s ease-in-out infinite;
+}
+@keyframes water-wave {
+  0%, 100% { background-position: 0 0, 0 0; }
+  50% { background-position: 10px 10px, 30px 18px; }
+}
+
+.square.effect-earth {
+  /* Earthy brown/green overlay with a soft glowing/flash effect */
+  background:
+    radial-gradient(ellipse at 45% 60%, #9a754a63 55%, transparent 100%),
+    repeating-linear-gradient(115deg, #86704140 10px, #b8a76a56 30px, transparent 60px);
+  box-shadow: 0 0 14px 3px #7f653870, 0 0 31px 4px #bca05778;
+  animation: earth-glow 3.2s cubic-bezier(.82,-0.02,.51,1.12) infinite;
+}
+/* Earthquake effect: play once when .effect-earth class is first applied */
+.square.effect-earth {
+  animation-name: earth-quake, earth-glow;
+  animation-duration: 0.38s, 3.2s;
+  animation-timing-function: cubic-bezier(.31,.64,.37,1.6), cubic-bezier(.82,-0.02,.51,1.12);
+  animation-iteration-count: 1, infinite;
+  animation-fill-mode: both, both;
+  animation-delay: 0s, 0s;
+}
+
+@keyframes earth-glow {
+  0%,100% { box-shadow: 0 0 10px 1px #a48853b2, 0 0 23px 3px #bca06d25; }
+  45% { box-shadow: 0 0 26px 7px #ffe1a0bb, 0 0 50px 12px #a0844c80;}
+}
+@keyframes earth-quake {
+  0% { transform: translate(0px, 0px); }
+  10% { transform: translate(-2px, 2px) rotate(-1deg);}
+  18% { transform: translate(2px, -2px) rotate(1deg);}
+  26% { transform: translate(-2px, 1px) rotate(-2deg);}
+  34% { transform: translate(1px, 3px) rotate(2deg);}
+  42% { transform: translate(-3px, -1px) rotate(1.5deg);}
+  50% { transform: translate(3px, 1px) rotate(-2deg);}
+  60% { transform: translate(-2px, -3px) rotate(.5deg);}
+  70% { transform: translate(2px, 2px) rotate(-1deg);}
+  80% { transform: translate(-2px, -1px) rotate(0.7deg);}
+  90% { transform: translate(1px, 1px) rotate(-.8deg);}
+  100% { transform: translate(0px, 0px); }
+}
+
+.square.effect-plant {
+  /* Fresh green/teal glow and subtle vine pattern for plant/root area */
+  background:
+    radial-gradient(circle at 55% 53%, #3bee8322 50%, transparent 90%),
+    repeating-linear-gradient(120deg, #38de7c3c 8px, #b4f9b63d 18px, transparent 35px);
+  box-shadow: 0 0 12px 3px #11ff85a8, 0 0 33px 7px #b4f9b649;
+  animation: plant-glow 3s cubic-bezier(.82,-0.02,.51,1.12) infinite;
+}
+@keyframes plant-glow {
+  0%,100% { box-shadow: 0 0 10px 1px #1fdc66a0, 0 0 23px 3px #b4f9b635; }
+  45% { box-shadow: 0 0 24px 5px #00ffbdc2, 0 0 40px 9px #2cf56870;}
+}
+
+.square.effect-metal {
+  /* Metallic overlay for metal area with animated shimmer movement like water (no shine) */
+  background:
+    repeating-linear-gradient(75deg, #cecece46 5px, #e2e2e29a 15px, #c6b38215 23px, transparent 54px 60px),
+    repeating-linear-gradient(155deg, #ede7c2af 20px, #91895420 40px, transparent 65px 85px);
+  box-shadow: 0 0 13px 5px #fffae65a, 0 0 30px 7px #dbc9a7a4 inset;
+  animation: metal-wave 3s ease-in-out infinite;
+  background-position: 0 0, 0 0;
+}
+
+@keyframes metal-wave {
+  0%, 100% { background-position: 0 0, 0 0; }
+  50% { background-position: 12px 8px, 28px 16px; }
+}

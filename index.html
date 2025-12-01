@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Chọn Biến Thể Cờ Vua</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #111;
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      max-width: 600px;
+      width: 100%;
+    }
+    h1 {
+      margin: 0 0 30px 0;
+      font-size: 28px;
+      font-weight: 700;
+      color: #222;
+      text-align: center;
+    }
+    .variants {
+      display: grid;
+      gap: 16px;
+    }
+    .variant-card {
+      border: 2px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+    .variant-card:hover {
+      border-color: #667eea;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    }
+    .variant-card h2 {
+      margin: 0 0 8px 0;
+      font-size: 20px;
+      color: #333;
+    }
+    .variant-card p {
+      margin: 0;
+      color: #666;
+      font-size: 14px;
+    }
+    .variant-card.available {
+      border-color: #4caf50;
+    }
+    .variant-card.coming-soon {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .variant-card.coming-soon:hover {
+      transform: none;
+      border-color: #e0e0e0;
+      box-shadow: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎮 Chọn Biến Thể Cờ Vua</h1>
+    <div class="variants">
+      <a href="variants/classic.html" class="variant-card available">
+        <h2>♔ Cờ Vua Cổ Điển</h2>
+        <p>Cờ vua truyền thống với nhập thành và luật chơi chuẩn</p>
+      </a>
+      <a href="variants/elemental.html" class="variant-card available">
+        <h2>🌪️ Cờ Vua Nguyên Tố</h2>
+        <p>Mỗi quân cờ mang một nguyên tố: tạo hiệu ứng đặc biệt theo từng nguyên tố khi tấn công hoặc phòng thủ</p>
+      </a>
+    </div>
+  </div>
+    </div>
+  </div>
+</body>
+</html>

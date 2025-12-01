@@ -1,0 +1,43 @@
+// HƯỚNG DẪN PHÍM TẮT TRONG CURSOR (VSC)
+//
+// Cơ bản:
+//   Ctrl + P               : Mở nhanh file/tìm file
+//   Ctrl + Shift + P       : Command Palette (bảng lệnh)
+//   Ctrl + Shift + O       : Đi tới biểu tượng (hàm, class) trong file
+//   Ctrl + Shift + N       : Mở cửa sổ mới
+//   Ctrl + W               : Đóng tab hiện tại
+//   Ctrl + Tab             : Chuyển tab
+//
+// Code:
+//   Alt + Up / Down        : Di chuyển dòng lên/xuống
+//   Ctrl + /               : Comment/Uncomment dòng
+//   Shift + Alt + A        : Comment/Uncomment khối
+//   Ctrl + Space           : Gợi ý code (IntelliSense)
+//   Ctrl + D               : Chọn/đánh dấu từ tiếp theo giống từ hiện tại
+//   Ctrl + Shift + L       : Chọn tất cả các từ đang chọn
+//   Alt + Click            : Đặt nhiều con trỏ (multi-cursor)
+//   Ctrl + F2              : Chọn tất cả instance của từ đang chọn
+//
+// Di chuyển & Tìm kiếm:
+//   Ctrl + F               : Tìm kiếm trong file
+//   Ctrl + H               : Thay thế trong file
+//   Ctrl + Shift + F       : Tìm kiếm toàn project
+//   Ctrl + Shift + H       : Thay thế toàn project
+//   F3 / Shift + F3        : Tìm tiến/tìm lùi
+//
+// Lưu & format:
+//   Ctrl + S               : Lưu file
+//   Ctrl + K, F            : Format tài liệu
+//
+// Điều hướng code (Cursor):
+//   Ctrl + J               : Ẩn/hiện terminal
+//   Ctrl + `               : Mở terminal tích hợp
+//   Ctrl + B               : Ẩn/hiện sidebar
+//   Ctrl + Shift + E       : Đi tới Explorer (danh sách file)
+//   Ctrl + Shift + M       : Đi tới Problems (lỗi, warning)
+//
+// Một số tính năng riêng của Cursor (nếu đã cài đặt extension Cursor):
+//   Ctrl + Alt + Enter     : Thực thi lệnh mới của Cursor (Insert at cursor, v.v.)
+//   Ctrl + Shift + Space   : Trigger Action Panel của Cursor
+//
+// Chú ý: Với Mac, hãy thay Ctrl thành Command (⌘), Alt thành Option.
