@@ -92,5 +92,41 @@
   </div>
     </div>
   </div>
+
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-analytics.js";
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+  
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyA1Za6Nl_O2EPFmsRrr6fgyR8bcmtdBGQE",
+      authDomain: "first-web-24e99.firebaseapp.com",
+      projectId: "first-web-24e99",
+      storageBucket: "first-web-24e99.firebasestorage.app",
+      messagingSenderId: "1091910495572",
+      appId: "1:1091910495572:web:a698678d910c41b7732cc1",
+      measurementId: "G-H18EBEZKF0"
+    };
+  
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+
+    import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+
+    createUserWithEmailAndPassword(auth, email, password)
+      .then(user => console.log("Đăng ký thành công"))
+      .catch(err => console.error(err));
+
+    import { signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+
+    signInWithEmailAndPassword(auth, email, password)
+      .then(user => console.log("Đăng nhập thành công"))
+      .catch(err => console.error(err));
+  </script>
 </body>
 </html>
