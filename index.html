@@ -74,10 +74,129 @@
       border-color: #e0e0e0;
       box-shadow: none;
     }
+    .auth-container {
+      margin-bottom: 40px;
+      background: #f7f7fa;
+      border-radius: 10px;
+      padding: 24px;
+      box-shadow: 0 0 0 rgba(0,0,0,0.06);
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .auth-tabs {
+      display: flex;
+      gap: 1px;
+      margin-bottom: 14px;
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 8px 0;
+      cursor: pointer;
+      background: #edeefd;
+      border: none;
+      font-weight: 600;
+      border-radius: 8px 8px 0 0;
+      color: #6070b0;
+    }
+    .auth-tab.active {
+      background: #667eea;
+      color: #fff;
+    }
+    .auth-form label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+      color: #474747;
+    }
+    .auth-form input[type="email"],
+    .auth-form input[type="password"] {
+      width: 100%;
+      padding: 8px 8px;
+      margin-bottom: 10px;
+      border: 1.5px solid #cfd7ef;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+    .auth-form button[type="submit"] {
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 0;
+      font-size: 15px;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    .auth-message {
+      font-size: 14px;
+      color: #666;
+      margin-top: 6px;
+      padding-bottom: 2px;
+      min-height: 18px;
+    }
+    .auth-form {
+      display: none;
+    }
+    .auth-form.active {
+      display: block;
+    }
+    .auth-status {
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: #2b7a3c;
+      text-align: center;
+    }
+    .auth-signout-btn {
+      background: #e37474;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      padding: 7px 0;
+      width: 100%;
+      margin-top: 8px;
+      cursor: pointer;
+      font-weight: 700;
+    }
   </style>
 </head>
 <body>
   <div class="container">
+
+    <!-- Auth Section -->
+    <div class="auth-container" id="auth-container">
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login" type="button">Đăng nhập</button>
+        <button class="auth-tab" id="tab-register" type="button">Đăng ký</button>
+      </div>
+
+      <form id="login-form" class="auth-form active" autocomplete="on">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" required placeholder="example@gmail.com" autocomplete="email">
+        <label for="login-password">Mật khẩu</label>
+        <input type="password" id="login-password" required placeholder="Nhập mật khẩu" autocomplete="current-password">
+        <button type="submit">Đăng nhập</button>
+        <div class="auth-message" id="login-message"></div>
+      </form>
+
+      <form id="register-form" class="auth-form" autocomplete="on">
+        <label for="register-email">Email</label>
+        <input type="email" id="register-email" required placeholder="example@gmail.com" autocomplete="email">
+        <label for="register-password">Mật khẩu</label>
+        <input type="password" id="register-password" required placeholder="Tối thiểu 6 ký tự" minlength="6" autocomplete="new-password">
+        <button type="submit">Đăng ký</button>
+        <div class="auth-message" id="register-message"></div>
+      </form>
+
+      <div id="auth-status" class="auth-status" style="display: none;"></div>
+      <button class="auth-signout-btn" id="signout-btn" style="display: none;">Đăng xuất</button>
+    </div>
+    <!-- End Auth Section -->
+
     <h1>🎮 Chọn Biến Thể Cờ Vua</h1>
     <div class="variants">
       <a href="variants/classic.html" class="variant-card available">
@@ -90,18 +209,14 @@
       </a>
     </div>
   </div>
-    </div>
-  </div>
 
   <script type="module">
-    // Import the functions you need from the SDKs you need
+    // Import firebase modules
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-analytics.js";
-    // TODO: Add SDKs for Firebase products that you want to use
-    // https://firebase.google.com/docs/web/setup#available-libraries
-  
-    // Your web app's Firebase configuration
-    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+
+    // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyA1Za6Nl_O2EPFmsRrr6fgyR8bcmtdBGQE",
       authDomain: "first-web-24e99.firebaseapp.com",
@@ -111,22 +226,106 @@
       appId: "1:1091910495572:web:a698678d910c41b7732cc1",
       measurementId: "G-H18EBEZKF0"
     };
-  
+
     // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
+    const auth = getAuth(app);
 
-    import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+    // Tab switch logic
+    const tabLogin = document.getElementById('tab-login');
+    const tabRegister = document.getElementById('tab-register');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const loginMessage = document.getElementById('login-message');
+    const registerMessage = document.getElementById('register-message');
+    const authStatus = document.getElementById('auth-status');
+    const signoutBtn = document.getElementById('signout-btn');
+    const authContainer = document.getElementById('auth-container');
 
-    createUserWithEmailAndPassword(auth, email, password)
-      .then(user => console.log("Đăng ký thành công"))
-      .catch(err => console.error(err));
+    tabLogin.onclick = function() {
+      tabLogin.classList.add('active');
+      tabRegister.classList.remove('active');
+      loginForm.classList.add('active');
+      registerForm.classList.remove('active');
+      loginMessage.textContent = '';
+      registerMessage.textContent = '';
+    };
+    tabRegister.onclick = function() {
+      tabLogin.classList.remove('active');
+      tabRegister.classList.add('active');
+      loginForm.classList.remove('active');
+      registerForm.classList.add('active');
+      loginMessage.textContent = '';
+      registerMessage.textContent = '';
+    };
 
-    import { signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+    // Register
+    registerForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const email = document.getElementById('register-email').value.trim();
+      const password = document.getElementById('register-password').value;
+      registerMessage.textContent = '';
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        registerMessage.textContent = 'Đăng ký thành công! Bạn đã có thể đăng nhập.';
+        registerMessage.style.color = "green";
+      } catch (err) {
+        registerMessage.textContent = err.message.replace("Firebase: ", "").replace("auth/", "").replace(/-/g, " ");
+        registerMessage.style.color = "red";
+      }
+    });
 
-    signInWithEmailAndPassword(auth, email, password)
-      .then(user => console.log("Đăng nhập thành công"))
-      .catch(err => console.error(err));
+    // Login
+    loginForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      loginMessage.textContent = '';
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        loginMessage.textContent = 'Đăng nhập thành công!';
+        loginMessage.style.color = "green";
+      } catch (err) {
+        loginMessage.textContent = "Đăng nhập thất bại: " + err.message.replace("Firebase: ", "").replace("auth/", "").replace(/-/g, " ");
+        loginMessage.style.color = "red";
+      }
+    });
+
+    // Auth State
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        // Logged in
+        authStatus.textContent = `Đang đăng nhập: ${user.email}`;
+        authStatus.style.display = "block";
+        loginForm.style.display = "none";
+        registerForm.style.display = "none";
+        tabLogin.style.display = "none";
+        tabRegister.style.display = "none";
+        signoutBtn.style.display = "block";
+        loginMessage.textContent = "";
+        registerMessage.textContent = "";
+      } else {
+        // Logged out
+        authStatus.textContent = "";
+        authStatus.style.display = "none";
+        loginForm.style.display = tabLogin.classList.contains("active") ? "block" : "none";
+        registerForm.style.display = tabRegister.classList.contains("active") ? "block" : "none";
+        tabLogin.style.display = "inline-block";
+        tabRegister.style.display = "inline-block";
+        signoutBtn.style.display = "none";
+      }
+    });
+
+    // Sign out
+    signoutBtn.addEventListener("click", async function() {
+      await signOut(auth);
+      tabLogin.classList.add('active');
+      tabRegister.classList.remove('active');
+      loginForm.classList.add('active');
+      registerForm.classList.remove('active');
+    });
+
   </script>
 </body>
 </html>
